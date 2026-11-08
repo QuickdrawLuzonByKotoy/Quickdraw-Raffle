@@ -3554,6 +3554,11 @@
 
         // publishLiveDraw already called Store.save(); ensure event status persisted
         Store.save();
+        Store.uiState.publicFilter = 'all';
+        if (typeof PublicView !== 'undefined' && PublicView.render) {
+          PublicView.render();
+        }
+        if (window.UI) UI.syncHeaderIndicators();
 
         const stage = document.getElementById('draw-overlay-stage');
         stage.innerHTML = `
@@ -3597,8 +3602,14 @@
         Store.uiState.isDrawInProgress = false;
         document.getElementById('live-draw-overlay').classList.add('hidden');
         this.clearLiveDraw();
+        // Show all events including newly drawn results on the public board
+        Store.uiState.publicFilter = 'all';
+        Store.uiState.activeTab = 'public';
+        if (window.UI) {
+          UI.syncHeaderIndicators();
+          UI.renderCurrentTab();
+        }
         UI.notify('Live Draw finalized! Top congratulatory marquee and Public Results Board updated.', 'success');
-        UI.switchTab('public');
       },
 
       /**
@@ -3608,16 +3619,26 @@
       onRemoteState() {
         const live = Store.db && Store.db.liveDraw;
 
-        // Always refresh dashboards when not mid local animation host
-        if (!this.isRemoteFollower && !Store.uiState.isDrawInProgress) {
-          if (window.UI) {
-            UI.syncHeaderIndicators();
-            UI.renderCurrentTab();
+        const refreshBoards = function () {
+          if (!window.UI) return;
+          UI.syncHeaderIndicators();
+          // Always rebuild the public raffle board so statuses/results stay current
+          if (typeof PublicView !== 'undefined' && PublicView.render) {
+            PublicView.render();
           }
-        }
+          // Refresh whichever portal tab is active (agent/manager/etc.)
+          if (!Store.uiState.isDrawInProgress || (GameEngine.isRemoteFollower)) {
+            const tab = Store.uiState.activeTab;
+            if (tab === 'agent' && typeof AgentView !== 'undefined') AgentView.render();
+            else if (tab === 'manager' && typeof ManagerView !== 'undefined') ManagerView.render();
+            else if (tab === 'superadmin' && typeof SuperadminView !== 'undefined') SuperadminView.render();
+            else if (tab === 'draw' && typeof DrawStudioView !== 'undefined') DrawStudioView.render();
+            else if (tab === 'public') PublicView.render();
+          }
+        };
 
+        // No active live draw — keep all boards in sync with cloud events/statuses
         if (!live || !live.active) {
-          // Remote cleared draw — close overlay on followers
           if (this.isRemoteFollower) {
             this.clearAllTimers();
             this.isRemoteFollower = false;
@@ -3625,11 +3646,9 @@
             Store.uiState.isDrawInProgress = false;
             const overlay = document.getElementById('live-draw-overlay');
             if (overlay) overlay.classList.add('hidden');
-            if (window.UI) {
-              UI.syncHeaderIndicators();
-              UI.renderCurrentTab();
-            }
+            Store.uiState.publicFilter = 'all';
           }
+          refreshBoards();
           return;
         }
 
@@ -3666,6 +3685,12 @@
           this.runShowcasePhase(fakeEvent, fakePrize, live.prizeIndex || 0, live.totalPrizes || 1, live.targetSlot, function () {});
         } else if (live.phase === 'summary') {
           this.clearAllTimers();
+          // Results are in Store.db — refresh public board under the overlay
+          Store.uiState.publicFilter = 'all';
+          if (typeof PublicView !== 'undefined' && PublicView.render) {
+            PublicView.render();
+          }
+          if (window.UI) UI.syncHeaderIndicators();
           const event = Store.getEventById(live.eventId) || {
             id: live.eventId,
             name: live.eventName,
