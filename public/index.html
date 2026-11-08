@@ -3113,7 +3113,87 @@
               </div>
             `}
           </div>
+
+          <!-- 5. Superadmin password change -->
+          <div class="rounded-2xl bg-slate-900 border border-rose-500/30 p-5 sm:p-6 space-y-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-key text-rose-400"></i>
+                5. Change Superadmin Password
+              </h3>
+              <p class="text-xs text-slate-400 mt-1">
+                Updates the live <code class="text-emerald-400">users</code> record in Supabase. Old password stops working on all devices after sync.
+              </p>
+            </div>
+            <div class="grid sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] font-semibold uppercase text-slate-500 mb-1">Current password</label>
+                <input id="sa-pass-current" type="password" autocomplete="current-password" placeholder="Current password"
+                  class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-rose-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold uppercase text-slate-500 mb-1">New password</label>
+                <input id="sa-pass-new" type="password" autocomplete="new-password" placeholder="Min 6 characters"
+                  class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-rose-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold uppercase text-slate-500 mb-1">Confirm new password</label>
+                <input id="sa-pass-confirm" type="password" autocomplete="new-password" placeholder="Repeat new password"
+                  class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-rose-400" />
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="button" onclick="SuperadminView.changePassword()"
+                class="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-sm transition">
+                Update Superadmin Password
+              </button>
+              <span class="text-[11px] text-slate-500">Username stays the same. You will stay logged in after the change.</span>
+            </div>
+          </div>
         `;
+      },
+
+      changePassword() {
+        const currentPass = (document.getElementById('sa-pass-current')?.value || '').trim();
+        const newPass = (document.getElementById('sa-pass-new')?.value || '').trim();
+        const confirmPass = (document.getElementById('sa-pass-confirm')?.value || '').trim();
+
+        const sa = Store.db.users.find(u =>
+          u.role === 'superadmin' &&
+          (Store.sessions.superadminUserId ? u.id === Store.sessions.superadminUserId : true)
+        ) || Store.db.users.find(u => u.role === 'superadmin');
+
+        if (!sa) {
+          UI.notify('No superadmin account found in the database.', 'error');
+          return;
+        }
+        if (!currentPass || sa.password !== currentPass) {
+          UI.notify('Current password is incorrect.', 'error');
+          return;
+        }
+        if (newPass.length < 6) {
+          UI.notify('New password must be at least 6 characters.', 'warning');
+          return;
+        }
+        if (newPass !== confirmPass) {
+          UI.notify('New password and confirmation do not match.', 'warning');
+          return;
+        }
+        if (newPass === currentPass) {
+          UI.notify('New password must be different from the current one.', 'warning');
+          return;
+        }
+
+        sa.password = newPass;
+        Store.save();
+        UI.notify('Superadmin password updated and synced to the cloud.', 'success');
+
+        const cur = document.getElementById('sa-pass-current');
+        const neu = document.getElementById('sa-pass-new');
+        const conf = document.getElementById('sa-pass-confirm');
+        if (cur) cur.value = '';
+        if (neu) neu.value = '';
+        if (conf) conf.value = '';
       }
     };
 
