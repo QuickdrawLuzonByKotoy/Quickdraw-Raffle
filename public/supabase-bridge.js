@@ -8,14 +8,36 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_11gaUy2989hXcGFT845GYg_r2BvQbVR';
   const STATE_ROW_ID = 'quickdraw_main';
 
+  function getSupabase() {
+    return window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+  }
+
+  function getStore() {
+    return window.Store || (typeof Store !== 'undefined' ? Store : null);
+  }
+
+  function getStorageKey() {
+    return window.STORAGE_KEY || (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'QUICKDRAW_DB_V3');
+  }
+
+  function getUI() {
+    return window.UI || (typeof UI !== 'undefined' ? UI : null);
+  }
+
   function startBridge() {
-    if (!window.supabase || !window.Store) {
-      console.warn('Supabase SDK or Store not found; retrying…');
-      setTimeout(startBridge, 100);
+    const supabaseLib = getSupabase();
+    const storeRef = getStore();
+
+    if (!supabaseLib || !storeRef) {
+      console.warn('Supabase SDK or Store not found; retrying…', {
+        hasSupabase: !!supabaseLib,
+        hasStore: !!storeRef
+      });
+      setTimeout(startBridge, 150);
       return;
     }
 
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    const sb = supabaseLib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     window.QuickdrawSupabase = sb;
 
     let isApplyingRemoteUpdate = false;
@@ -23,7 +45,7 @@
     let pendingPush = false;
 
     function isRemoteNewer(remotePayload, remoteUpdatedAt) {
-      const localTs = (Store.db && Store.db.meta && Store.db.meta.lastUpdated) || '';
+      const localTs = (storeRef.db && storeRef.db.meta && storeRef.db.meta.lastUpdated) || '';
       const remoteTs =
         (remotePayload && remotePayload.meta && remotePayload.meta.lastUpdated) ||
         remoteUpdatedAt ||
@@ -49,12 +71,12 @@
               created_at: u.createdAt || new Date().toISOString()
             };
           });
-          var userRes = await sb.from('users').upsert(userRows, { onConflict: 'id' });
+          const userRes = await sb.from('users').upsert(userRows, { onConflict: 'id' });
           if (userRes.error) console.warn('users upsert:', userRes.error.message);
         }
 
         if (Array.isArray(db.events) && db.events.length > 0) {
-          var eventRows = db.events.map(function (e) {
+          const eventRows = db.events.map(function (e) {
             return {
               id: e.id,
               name: e.name,
@@ -70,11 +92,11 @@
               created_at: e.createdAt || new Date().toISOString()
             };
           });
-          var evRes = await sb.from('events').upsert(eventRows, { onConflict: 'id' });
+          const evRes = await sb.from('events').upsert(eventRows, { onConflict: 'id' });
           if (evRes.error) console.warn('events upsert:', evRes.error.message);
 
-          var prizeRows = [];
-          var slotRows = [];
+          const prizeRows = [];
+          const slotRows = [];
           db.events.forEach(function (e) {
             (e.prizes || []).forEach(function (p) {
               prizeRows.push({
@@ -103,17 +125,17 @@
             });
           });
           if (prizeRows.length) {
-            var pRes = await sb.from('prizes').upsert(prizeRows, { onConflict: 'prize_id' });
+            const pRes = await sb.from('prizes').upsert(prizeRows, { onConflict: 'prize_id' });
             if (pRes.error) console.warn('prizes upsert:', pRes.error.message);
           }
           if (slotRows.length) {
-            var sRes = await sb.from('slots').upsert(slotRows, { onConflict: 'event_id,slot_number' });
+            const sRes = await sb.from('slots').upsert(slotRows, { onConflict: 'event_id,slot_number' });
             if (sRes.error) console.warn('slots upsert:', sRes.error.message);
           }
         }
 
         if (Array.isArray(db.proposals) && db.proposals.length > 0) {
-          var propRows = db.proposals.map(function (p) {
+          const propRows = db.proposals.map(function (p) {
             return {
               id: p.id,
               manager_id: p.managerId || null,
@@ -128,12 +150,12 @@
               created_at: p.createdAt || new Date().toISOString()
             };
           });
-          var propRes = await sb.from('proposals').upsert(propRows, { onConflict: 'id' });
+          const propRes = await sb.from('proposals').upsert(propRows, { onConflict: 'id' });
           if (propRes.error) console.warn('proposals upsert:', propRes.error.message);
         }
 
         if (Array.isArray(db.transactions) && db.transactions.length > 0) {
-          var txRows = db.transactions.map(function (t) {
+          const txRows = db.transactions.map(function (t) {
             return {
               id: t.id,
               event_id: t.eventId,
@@ -148,7 +170,7 @@
               created_at: t.createdAt || new Date().toISOString()
             };
           });
-          var txRes = await sb.from('transactions').upsert(txRows, { onConflict: 'id' });
+          const txRes = await sb.from('transactions').upsert(txRows, { onConflict: 'id' });
           if (txRes.error) console.warn('transactions upsert:', txRes.error.message);
         }
       } catch (err) {
@@ -157,7 +179,7 @@
     }
 
     async function pushStateToSupabase() {
-      if (isApplyingRemoteUpdate || !Store.db) return;
+      if (isApplyingRemoteUpdate || !storeRef.db) return;
       if (pushInFlight) {
         pendingPush = true;
         return;
@@ -166,20 +188,20 @@
       pendingPush = false;
 
       try {
-        var nowIso = new Date().toISOString();
-        Store.db.meta = Store.db.meta || {};
-        Store.db.meta.lastUpdated = nowIso;
+        const nowIso = new Date().toISOString();
+        storeRef.db.meta = storeRef.db.meta || {};
+        storeRef.db.meta.lastUpdated = nowIso;
 
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+          localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
         } catch (_) {}
 
-        var result = await sb
+        const result = await sb
           .from('app_state')
           .upsert(
             {
               id: STATE_ROW_ID,
-              payload: Store.db,
+              payload: storeRef.db,
               updated_at: nowIso
             },
             { onConflict: 'id' }
@@ -187,18 +209,16 @@
 
         if (result.error) {
           console.error('Supabase state save error:', result.error.message, result.error);
-          if (window.UI && UI.notify) {
-            UI.notify('Cloud save failed: ' + result.error.message, 'error');
-          }
+          const ui = getUI();
+          if (ui && ui.notify) ui.notify('Cloud save failed: ' + result.error.message, 'error');
           return;
         }
 
-        syncRelationalTables(Store.db);
+        syncRelationalTables(storeRef.db);
       } catch (err) {
         console.error('Failed to push state to Supabase:', err);
-        if (window.UI && UI.notify) {
-          UI.notify('Cloud save failed. Check console.', 'error');
-        }
+        const ui = getUI();
+        if (ui && ui.notify) ui.notify('Cloud save failed. Check console.', 'error');
       } finally {
         pushInFlight = false;
         if (pendingPush) {
@@ -210,7 +230,7 @@
 
     async function pullStateFromSupabase() {
       try {
-        var result = await sb
+        const result = await sb
           .from('app_state')
           .select('payload, updated_at')
           .eq('id', STATE_ROW_ID)
@@ -222,22 +242,21 @@
           return;
         }
 
-        var data = result.data;
+        const data = result.data;
         if (data && data.payload && Array.isArray(data.payload.events)) {
           if (isRemoteNewer(data.payload, data.updated_at)) {
             isApplyingRemoteUpdate = true;
-            Store.db = data.payload;
+            storeRef.db = data.payload;
             try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+              localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
             } catch (_) {}
-            if (window.UI) {
-              UI.syncHeaderIndicators();
-              if (!Store.uiState.isDrawInProgress) {
-                UI.renderCurrentTab();
-              }
+            const ui = getUI();
+            if (ui) {
+              ui.syncHeaderIndicators();
+              if (!storeRef.uiState.isDrawInProgress) ui.renderCurrentTab();
             }
             isApplyingRemoteUpdate = false;
-            console.log('Applied newer cloud state. lastUpdated=', Store.db.meta && Store.db.meta.lastUpdated);
+            console.log('Applied newer cloud state. lastUpdated=', storeRef.db.meta && storeRef.db.meta.lastUpdated);
           } else {
             console.log('Local state is current; pushing to cloud if needed.');
             await pushStateToSupabase();
@@ -250,14 +269,14 @@
       }
     }
 
-    var originalSave = Store.save.bind(Store);
-    Store.save = function () {
+    const originalSave = storeRef.save.bind(storeRef);
+    storeRef.save = function () {
       originalSave();
       pushStateToSupabase();
     };
 
-    var originalReset = Store.resetToSeed.bind(Store);
-    Store.resetToSeed = function () {
+    const originalReset = storeRef.resetToSeed.bind(storeRef);
+    storeRef.resetToSeed = function () {
       originalReset();
       pushStateToSupabase();
     };
@@ -268,19 +287,18 @@
         { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.' + STATE_ROW_ID },
         function (change) {
           if (!change.new || !change.new.payload) return;
-          var incoming = change.new.payload;
+          const incoming = change.new.payload;
           if (!isRemoteNewer(incoming, change.new.updated_at)) return;
 
           isApplyingRemoteUpdate = true;
-          Store.db = incoming;
+          storeRef.db = incoming;
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+            localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
           } catch (_) {}
-          if (window.UI) {
-            UI.syncHeaderIndicators();
-            if (!Store.uiState.isDrawInProgress) {
-              UI.renderCurrentTab();
-            }
+          const ui = getUI();
+          if (ui) {
+            ui.syncHeaderIndicators();
+            if (!storeRef.uiState.isDrawInProgress) ui.renderCurrentTab();
           }
           isApplyingRemoteUpdate = false;
         }
@@ -291,13 +309,14 @@
         }
       });
 
-    window.addEventListener('load', function () {
+    function schedulePull() {
       setTimeout(pullStateFromSupabase, 200);
-    });
+    }
 
-    // If load already fired, still pull
     if (document.readyState === 'complete') {
-      setTimeout(pullStateFromSupabase, 200);
+      schedulePull();
+    } else {
+      window.addEventListener('load', schedulePull);
     }
 
     console.log('Quickdraw Supabase bridge started');
