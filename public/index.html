@@ -1,19 +1,18 @@
-
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quickdraw — Community helping communities</title>
-  <!-- Supabase JS Client SDK for 24/7 Cloud Persistence -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <!-- Tailwind CSS CDN for utility styling -->
+  <!-- Supabase JS Client SDK for cloud persistence -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Tailwind CSS CDN for styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts: Inter for UI, JetBrains Mono for slot counters/timers -->
+  <!-- Google Fonts: Inter for UI, JetBrains Mono for slot counters and timers -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
-  <!-- Font Awesome for clean iconography -->
+  <!-- Font Awesome icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
   <script>
@@ -42,7 +41,7 @@
   </script>
 
   <style>
-    /* Custom scrollbars and marquee keyframes */
+    /* Custom scrollbars and top marquee animation */
     ::-webkit-scrollbar {
       width: 8px;
       height: 8px;
@@ -75,7 +74,7 @@
       .marquee-track { animation-duration: 70s; font-size: 0.8125rem; }
     }
 
-    /* Slot tumbler & winner celebration visual states */
+    /* Slot tumbler glow and winner card entrance animation */
     @keyframes pulseGlow {
       0%, 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.45), inset 0 0 15px rgba(16, 185, 129, 0.25); }
       50% { box-shadow: 0 0 55px rgba(245, 158, 11, 0.75), inset 0 0 25px rgba(245, 158, 11, 0.35); }
@@ -96,12 +95,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col selection:bg-emerald-500 selection:text-slate-950">
 
-  <!-- =====================================================================
-       PERSISTENT TOP CONGRATULATORY MARQUEE BANNER
-       Hidden until at least one Live Draw completes during platform operation,
-       then stays visible across all tabs without blocking UI until replaced
-       by the next completed draw.
-       ===================================================================== -->
+  <!-- Top congratulatory banner: stays hidden until a draw finishes, then shows latest winners -->
   <div id="global-marquee-container" class="hidden bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border-b border-amber-400/40 text-amber-200 text-xs sm:text-sm py-2 px-4 overflow-hidden relative z-30">
     <div class="max-w-7xl mx-auto flex items-center gap-3">
       <span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
@@ -116,13 +110,11 @@
     </div>
   </div>
 
-  <!-- =====================================================================
-       MAIN PLATFORM HEADER & 5-TAB NAVIGATION BAR
-       ===================================================================== -->
+  <!-- Main platform header and navigation tabs -->
   <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between py-3.5 gap-3">
-        <!-- Brand Identity -->
+        <!-- Brand title -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3 cursor-pointer" onclick="UI.switchTab('public')">
             <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20">
@@ -137,11 +129,10 @@
             </div>
           </div>
 
-          <!-- Active Session Indicator (Mobile) -->
           <div id="mobile-session-pill" class="md:hidden"></div>
         </div>
 
-        <!-- 5 Navigation Tabs -->
+        <!-- Role navigation tabs -->
         <nav class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar" aria-label="Main Navigation">
           <button id="tab-btn-public" onclick="UI.switchTab('public')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
             <i class="fa-solid fa-table-cells-large"></i>
@@ -170,36 +161,17 @@
     </div>
   </header>
 
-  <!-- =====================================================================
-       MAIN APPLICATION WORKSPACE (5 TAB VIEWS)
-       ===================================================================== -->
+  <!-- Main workspace containers for each tab -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-    <!-- TAB 1: PUBLIC RAFFLE EVENTS -->
     <section id="view-public" class="tab-view space-y-6"></section>
-
-    <!-- TAB 2: AGENT PORTAL -->
     <section id="view-agent" class="tab-view hidden space-y-6"></section>
-
-    <!-- TAB 3: MANAGER PORTAL -->
     <section id="view-manager" class="tab-view hidden space-y-6"></section>
-
-    <!-- TAB 4: SUPERADMIN PORTAL -->
     <section id="view-superadmin" class="tab-view hidden space-y-6"></section>
-
-    <!-- TAB 5: LIVE DRAW STUDIO -->
     <section id="view-draw" class="tab-view hidden space-y-6"></section>
-
   </main>
 
-  <!-- =====================================================================
-       GLOBAL LIVE DRAW LOCK OVERLAY
-       During an active raffle draw, all dashboards, slot sales, and tabs
-       are paused and locked behind this full-screen broadcast view.
-       Strictly no PII (nicknames or phone numbers) is rendered here.
-       ===================================================================== -->
+  <!-- Full-screen Live Draw broadcast overlay: locks navigation while a draw is running -->
   <div id="live-draw-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-8 overflow-y-auto">
-    <!-- Top Broadcast Header -->
     <div class="max-w-5xl w-full mx-auto flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
       <div class="flex items-center gap-3">
         <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/50 text-red-400 text-xs font-bold uppercase tracking-widest animate-pulse">
@@ -213,18 +185,14 @@
       </div>
     </div>
 
-    <!-- Center Stage: Active Tumbler or Final Summary -->
     <div id="draw-overlay-stage" class="max-w-4xl w-full mx-auto my-auto py-6 text-center"></div>
 
-    <!-- Bottom Progress Bar & Drawn Prizes Strip -->
     <div class="max-w-5xl w-full mx-auto border-t border-slate-800 pt-4">
       <div id="draw-overlay-Dock" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
     </div>
   </div>
 
-  <!-- =====================================================================
-       REUSABLE MODAL CONTAINER (Slot Inspection, Confirmations, Forms)
-       ===================================================================== -->
+  <!-- Reusable modal dialog for slot inspection and account edits -->
   <div id="app-modal-backdrop" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
     <div id="app-modal-card" class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
       <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">
@@ -238,18 +206,14 @@
     </div>
   </div>
 
-  <!-- =====================================================================
-       TOAST NOTIFICATION STACK
-       ===================================================================== -->
+  <!-- Toast notifications -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
-  <!-- =====================================================================
-       FOOTER
-       ===================================================================== -->
+  <!-- Footer -->
   <footer class="border-t border-slate-900 bg-slate-950 py-5 px-4 text-xs text-slate-500 mt-12">
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
       <div>
-        <strong class="text-slate-300">Quickdraw</strong> — Community helping communities. Designed for GitHub Codespaces deployment.
+        <strong class="text-slate-300">Quickdraw</strong> — Community helping communities.
       </div>
       <div class="flex items-center gap-4">
         <span>Zero Public PII Policy</span>
@@ -259,32 +223,16 @@
     </div>
   </footer>
 
-  <!-- =====================================================================
-       APPLICATION ENGINE, DATABASE LAYER, AND VIEW CONTROLLERS
-       ===================================================================== -->
   <script>
     /**
-     * QUICKDRAW PLATFORM ARCHITECTURE
-     * -----------------------------------------------------------------------
-     * 1. Storage & Schema (`STORAGE_KEY = 'QUICKDRAW_DB_V3'`):
-     *    - `users`: Superadmin (static check + record), Managers, and Agents.
-     *    - `events`: Raffle draws with lifecycle states:
-     *        'selling'  -> Agents can sell open slots.
-     *        'endorsed' -> 100% slots sold & Manager verified payment; queued for draw.
-     *        'drawn'    -> Live draw finished; winning slots have `releaseStatus`:
-     *                      'pending_release' ("For Release") or 'released' ("Released").
-     *        'archived' -> Automatically transitioned when ALL prizes in a drawn
-     *                      event reach `releaseStatus === 'released'`.
-     *    - `proposals`: Manager-submitted event endorsements awaiting Superadmin action.
-     *    - `transactions`: Audit log of individual and batch slot purchases.
+     * Quickdraw Platform Core State & View Controllers
+     * - Storage key: QUICKDRAW_DB_V3 (synced with Supabase via supabase-bridge.js)
+     * - Event statuses: 'selling' -> 'endorsed' -> 'drawn' -> 'archived'
      */
 
     const STORAGE_KEY = 'QUICKDRAW_DB_V3';
-    // Superadmin lives in Store.db.users (Supabase). No hard-coded credentials in the page.
 
-    /* =====================================================================
-       1. INITIAL SEED DATA GENERATOR
-       ===================================================================== */
+    // Returns an empty database structure so no fake events or users are auto-created
     function buildSeedDatabase() {
       const now = Date.now();
       return {
@@ -303,9 +251,7 @@
       };
     }
 
-    /* =====================================================================
-       2. DATABASE STORE & ACCESS CONTROL LAYER
-       ===================================================================== */
+    // Central Store for state management and role lookups
     const Store = {
       db: null,
 
@@ -331,7 +277,6 @@
       },
 
       init() {
-        // Local cache only — canonical state is loaded from Supabase by the bridge.
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
@@ -371,10 +316,11 @@
         this.uiState.draftBatchInput = '';
         this.db.meta.fromSeed = false;
         this.save();
-        UI.notify('Database reset to clean initial seed state.', 'success');
+        UI.notify('Database reset to clean initial state.', 'success');
         UI.renderCurrentTab();
       },
 
+      // Strips buyer nicknames, phone numbers, and preferred slots before rendering on the public board
       getPublicSafeEvent(event) {
         return {
           id: event.id,
@@ -429,10 +375,7 @@
     window.Store = Store;
     window.STORAGE_KEY = STORAGE_KEY;
 
-
-    /* =====================================================================
-       3. SYNTHESIZED SOUND ENGINE (Web Audio API)
-       ===================================================================== */
+    // Web Audio API sound effects for the live draw tumbler and winner reveal
     const SoundFX = {
       ctx: null,
       ensureCtx() {
@@ -482,9 +425,7 @@
       }
     };
 
-    /* =====================================================================
-       4. GLOBAL UI CONTROLLER & SHARED HELPERS
-       ===================================================================== */
+    // Shared UI helpers, modal management, and tab navigation
     const UI = {
       escapeHtml(str) {
         if (str === null || str === undefined) return '';
@@ -588,6 +529,11 @@
       },
 
       syncHeaderIndicators() {
+        // Check if another device just triggered a live draw whenever state syncs
+        if (window.GameEngine) {
+          window.GameEngine.checkForRemoteDraw();
+        }
+
         const endorsedEvents = Store.db.events.filter(e => e.status === 'endorsed');
         const pendingProposals = Store.db.proposals.filter(p => p.status === 'pending');
         const totalReady = endorsedEvents.length + pendingProposals.length;
@@ -699,9 +645,7 @@
       }
     };
 
-    /* =====================================================================
-       5. TAB 1: PUBLIC RAFFLE EVENTS RENDERER (STRICT ZERO-PII)
-       ===================================================================== */
+    // Tab 1: Public Raffle Events View (Zero PII exposed)
     const PublicView = {
       setFilter(filter) {
         Store.uiState.publicFilter = filter;
@@ -907,9 +851,7 @@
       }
     };
 
-    /* =====================================================================
-       6. TAB 2: AGENT PORTAL (LOGIN, SLOT SELLING, PRIZE RELEASE, PASSWORD)
-       ===================================================================== */
+    // Tab 2: Agent Portal (Slot sales, prize release tracking, password change)
     const AgentView = {
       preserveDraftInputs() {
         const nickEl = document.getElementById('buyer-nickname-input');
@@ -1504,9 +1446,7 @@
       }
     };
 
-    /* =====================================================================
-       7. TAB 3: MANAGER PORTAL (AGENT CRUD, ANALYTICS, ENDORSE FOR DRAW)
-       ===================================================================== */
+    // Tab 3: Manager Portal (Agent accounts, bracket analytics, draw endorsements)
     const ManagerView = {
       login() {
         const u = (document.getElementById('mgr-login-user')?.value ?? '').trim();
@@ -1892,9 +1832,7 @@
       }
     };
 
-    /* =====================================================================
-       8. TAB 4: SUPERADMIN PORTAL (HIERARCHY TOP, DISCRETE OVERRIDE, DB VAULT)
-       ===================================================================== */
+    // Tab 4: Superadmin Portal (Global oversight, event creation, discrete overrides, database vault)
     const SuperadminView = {
       draftEventForm: {
         name: '',
@@ -2225,11 +2163,6 @@
         this.render();
       },
 
-      /**
-       * Approves a Manager Proposal and either:
-       * - Immediately launches the Official Live Draw (`launchDrawImmediately = true`)
-       * - Or opens it on the Selling Board (`launchDrawImmediately = false`)
-       */
       approveProposal(propId, launchDrawImmediately = true) {
         const prop = Store.db.proposals.find(p => p.id === propId);
         if (!prop || prop.status !== 'pending') {
@@ -2237,15 +2170,14 @@
           return;
         }
 
-        // Fallback to any active manager if the original manager account was deleted
         const mgr = Store.getUserById(prop.managerId) || Store.db.users.find(u => u.role === 'manager') || {
-          id: 'mgr_south',
-          bracketName: 'South Metro Community Bracket'
+          id: 'mgr_default',
+          bracketName: 'Community Bracket'
         };
 
         const bracketAgent = Store.db.users.find(u => u.role === 'agent' && u.managerId === mgr.id) ||
                              Store.db.users.find(u => u.role === 'agent') ||
-                             { id: 'agent_sam' };
+                             { id: 'agent_default' };
 
         const nowIso = new Date().toISOString();
         const totalSlots = Number(prop.proposedSlots) || 30;
@@ -2257,7 +2189,7 @@
             slots.push({
               slotNumber: i,
               status: 'sold',
-              buyerNickname: `Rider_${String(i).padStart(2, '0')}`,
+              buyerNickname: `Participant_${String(i).padStart(2, '0')}`,
               buyerPhone: `0918-${String(200 + i).padStart(3, '0')}-${String(3000 + i * 9).slice(0, 4)}`,
               agentId: bracketAgent.id,
               soldAt: nowIso,
@@ -2543,7 +2475,6 @@
             </div>
           </div>
 
-          <!-- 1. Create New Raffle Event (with Discrete Preferred Winning Slot Override) -->
           <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
               <div>
@@ -2612,7 +2543,6 @@
               </button>
             </div>
 
-            <!-- Pending Manager Event Endorsements & Draw Queue -->
             ${(pendingProposals.length > 0 || endorsedEvents.length > 0) ? `
               <div class="pt-4 border-t border-slate-800 space-y-2.5">
                 <div class="text-xs font-bold uppercase text-amber-400">
@@ -2660,7 +2590,6 @@
             ` : ''}
           </div>
 
-          <!-- 2. Global Raffle Events Overview & Discrete Override Inspector -->
           <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
             <h3 class="text-base sm:text-lg font-bold text-white">2. Global Raffle Events Overview (Selling, Endorsed, Drawn &amp; History)</h3>
             <div class="space-y-3">
@@ -2716,7 +2645,6 @@
             </div>
           </div>
 
-          <!-- 3. Manager Accounts & Hierarchy Analytics -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-8 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
               <h3 class="text-base font-bold text-white">3. Manager Hierarchy &amp; Bracket Finance Analytics</h3>
@@ -2769,7 +2697,6 @@
             </div>
           </div>
 
-          <!-- 4. Protected Database Vault -->
           <div class="rounded-2xl bg-slate-900 border-2 border-rose-500/40 p-5 sm:p-6 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -2780,7 +2707,7 @@
                 <p class="text-xs text-slate-400">Only the authenticated Superadmin can view, copy, archive, and download raw platform database records.</p>
               </div>
               <button onclick="Store.resetToSeed()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-amber-300 border border-amber-500/30">
-                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Demo Seed Data
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Database State
               </button>
             </div>
 
@@ -2839,7 +2766,6 @@
               Update Superadmin Password
             </button>
           </div>
-
         `;
       },
 
@@ -2879,12 +2805,9 @@
           if (el) el.value = '';
         });
       }
-
     };
 
-    /* =====================================================================
-       9. TAB 5: LIVE DRAW STUDIO & GLOBAL GAME ENGINE (8s ROLL + 10s SHOWCASE)
-       ===================================================================== */
+    // Tab 5: Live Draw Studio View
     const DrawStudioView = {
       loginFromStudio() {
         const u = (document.getElementById('draw-login-user')?.value || '').trim();
@@ -2948,7 +2871,6 @@
             </div>
           </div>
 
-          <!-- Ready / Endorsed Events Queue -->
           <div class="space-y-4">
             <h3 class="text-base font-bold text-white uppercase tracking-wider">
               Endorsed Events Ready for Drawing (${endorsedEvents.length + pendingProposals.length})
@@ -3036,15 +2958,14 @@
       }
     };
 
-    /* =====================================================================
-       10. GAME ENGINE: 8-SECOND DRAW TUMBLER + 10-SECOND WINNER SHOWCASE
-       ===================================================================== */
     window.UI = UI;
 
+    // Live Draw Engine: Synchronizes the 8s tumbler roll and 10s showcase across all connected devices
     const GameEngine = {
       ROLL_DURATION_MS: 8000,
       SHOWCASE_DURATION_MS: 10000,
       activeTimers: [],
+      playedDrawIds: new Set(),
 
       clearAllTimers() {
         this.activeTimers.forEach(id => {
@@ -3055,11 +2976,13 @@
       },
 
       resolveWinningSlotNumber(event, prize, alreadyWonSlotsSet) {
+        // Use the Superadmin's discrete preferred slot if set and not yet drawn
         const pref = prize.preferredSlot ? parseInt(prize.preferredSlot, 10) : null;
         if (pref && pref >= 1 && pref <= event.totalSlots && !alreadyWonSlotsSet.has(pref)) {
           return pref;
         }
 
+        // Otherwise pick randomly from sold slots that haven't won yet
         const candidates = event.slots
           .filter(s => s.status === 'sold' && !alreadyWonSlotsSet.has(s.slotNumber))
           .map(s => s.slotNumber);
@@ -3076,6 +2999,7 @@
         return pool[Math.floor(Math.random() * pool.length)];
       },
 
+      // Triggered on the Superadmin device when starting an official draw
       startOfficialDraw(eventId) {
         const event = Store.getEventById(eventId);
         if (!event || (event.status !== 'endorsed' && event.status !== 'selling')) {
@@ -3083,6 +3007,95 @@
           return;
         }
 
+        // Pre-calculate the winning slots before rolling so every device shows the exact same winners
+        const alreadyWonSlots = new Set();
+        const drawId = 'draw_' + Date.now();
+        const startedAt = Date.now();
+
+        const stagedWinners = event.prizes.map(prize => {
+          const winningSlotNum = this.resolveWinningSlotNumber(event, prize, alreadyWonSlots);
+          alreadyWonSlots.add(winningSlotNum);
+
+          // Attach broadcast metadata onto each prize so Supabase syncs it with the event row
+          prize.drawBroadcastId = drawId;
+          prize.drawStartedAt = startedAt;
+          prize.stagedWinningSlot = winningSlotNum;
+
+          return {
+            prizeId: prize.prizeId,
+            slotNumber: winningSlotNum,
+            rankLabel: prize.rankLabel,
+            description: prize.description
+          };
+        });
+
+        // Also store the broadcast session at the top level of Store.db
+        Store.db.liveDraw = {
+          drawId: drawId,
+          eventId: event.id,
+          startedAt: startedAt,
+          active: true,
+          winners: stagedWinners
+        };
+
+        this.playedDrawIds.add(drawId);
+
+        // Save immediately at launch so supabase-bridge pushes the start signal to all other devices
+        Store.save();
+
+        // Run the animation on the Superadmin host screen
+        this.runBroadcastSequence(event, stagedWinners, true);
+      },
+
+      // Checks if another device (Superadmin) has started a live draw in Supabase
+      checkForRemoteDraw() {
+        if (Store.uiState.isDrawInProgress || !Store.db) return;
+
+        const now = Date.now();
+
+        // 1. Check top-level liveDraw state if synced
+        if (Store.db.liveDraw && Store.db.liveDraw.active && Store.db.liveDraw.drawId) {
+          const ld = Store.db.liveDraw;
+          const validWindowMs = (ld.winners ? ld.winners.length : 1) * (this.ROLL_DURATION_MS + this.SHOWCASE_DURATION_MS) + 25000;
+
+          if (!this.playedDrawIds.has(ld.drawId) && (now - Number(ld.startedAt || 0)) < validWindowMs) {
+            const event = Store.getEventById(ld.eventId);
+            if (event) {
+              this.playedDrawIds.add(ld.drawId);
+              this.runBroadcastSequence(event, ld.winners, false);
+              return;
+            }
+          }
+        }
+
+        // 2. Check event prize metadata synced through the Supabase events table
+        if (Array.isArray(Store.db.events)) {
+          for (const ev of Store.db.events) {
+            if (!Array.isArray(ev.prizes) || ev.prizes.length === 0) continue;
+
+            const firstPrize = ev.prizes[0];
+            const bId = firstPrize.drawBroadcastId;
+            const startedAt = Number(firstPrize.drawStartedAt || 0);
+            const validWindowMs = ev.prizes.length * (this.ROLL_DURATION_MS + this.SHOWCASE_DURATION_MS) + 25000;
+
+            if (bId && !this.playedDrawIds.has(bId) && (now - startedAt) < validWindowMs) {
+              const stagedWinners = ev.prizes.map(p => ({
+                prizeId: p.prizeId,
+                slotNumber: p.stagedWinningSlot || p.winningSlot || 1,
+                rankLabel: p.rankLabel,
+                description: p.description
+              }));
+
+              this.playedDrawIds.add(bId);
+              this.runBroadcastSequence(ev, stagedWinners, false);
+              return;
+            }
+          }
+        }
+      },
+
+      // Shared animation runner used by both the Superadmin host and remote viewer devices
+      runBroadcastSequence(event, stagedWinners, isHost) {
         this.clearAllTimers();
         Store.uiState.isDrawInProgress = true;
 
@@ -3094,35 +3107,36 @@
         dockEl.innerHTML = '';
         overlay.classList.remove('hidden');
 
-        const alreadyWonSlots = new Set();
         const drawnSummary = [];
 
         const runPrizeSequence = (prizeIndex) => {
-          if (prizeIndex >= event.prizes.length) {
-            this.renderFinalDrawSummary(event, drawnSummary);
+          if (prizeIndex >= stagedWinners.length) {
+            this.renderFinalDrawSummary(event, drawnSummary, isHost);
             return;
           }
 
-          const currentPrize = event.prizes[prizeIndex];
-          const winningSlotNum = this.resolveWinningSlotNumber(event, currentPrize, alreadyWonSlots);
-          alreadyWonSlots.add(winningSlotNum);
+          const currentWinner = stagedWinners[prizeIndex];
+          const winningSlotNum = currentWinner.slotNumber;
 
-          this.runRollingPhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
-            currentPrize.winningSlot = winningSlotNum;
-            currentPrize.releaseStatus = 'pending_release';
+          this.runRollingPhase(event, currentWinner, prizeIndex, stagedWinners.length, winningSlotNum, () => {
+            const prizeRecord = event.prizes.find(p => p.prizeId === currentWinner.prizeId) || event.prizes[prizeIndex];
+            if (prizeRecord) {
+              prizeRecord.winningSlot = winningSlotNum;
+              prizeRecord.releaseStatus = 'pending_release';
+            }
 
             drawnSummary.push({
               slotNumber: winningSlotNum,
-              rankLabel: currentPrize.rankLabel,
-              description: currentPrize.description
+              rankLabel: currentWinner.rankLabel,
+              description: currentWinner.description
             });
 
             const dockCard = document.createElement('div');
             dockCard.className = 'p-3 rounded-xl bg-slate-900 border border-amber-400/50 flex items-center justify-between gap-2 text-xs';
             dockCard.innerHTML = `
               <div class="truncate">
-                <div class="font-bold text-amber-300">${UI.escapeHtml(currentPrize.rankLabel)}</div>
-                <div class="text-slate-300 truncate">${UI.escapeHtml(currentPrize.description)}</div>
+                <div class="font-bold text-amber-300">${UI.escapeHtml(currentWinner.rankLabel)}</div>
+                <div class="text-slate-300 truncate">${UI.escapeHtml(currentWinner.description)}</div>
               </div>
               <span class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono font-extrabold shrink-0">
                 Slot #${String(winningSlotNum).padStart(2, '0')}
@@ -3130,7 +3144,7 @@
             `;
             dockEl.appendChild(dockCard);
 
-            this.runShowcasePhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
+            this.runShowcasePhase(event, currentWinner, prizeIndex, stagedWinners.length, winningSlotNum, () => {
               runPrizeSequence(prizeIndex + 1);
             });
           });
@@ -3263,11 +3277,20 @@
         this.activeTimers.push(showcaseInterval);
       },
 
-      renderFinalDrawSummary(event, drawnSummary) {
+      renderFinalDrawSummary(event, drawnSummary, isHost) {
         this.clearAllTimers();
 
         event.status = 'drawn';
         event.drawnAt = new Date().toISOString();
+
+        // Clear the temporary broadcast flags now that the draw has completed
+        event.prizes.forEach(p => {
+          delete p.drawBroadcastId;
+          delete p.drawStartedAt;
+          delete p.stagedWinningSlot;
+        });
+
+        Store.db.liveDraw = null;
 
         Store.db.marquee = {
           eventId: event.id,
@@ -3277,7 +3300,12 @@
           winners: drawnSummary
         };
 
-        Store.save();
+        // Only the host device writes the completed draw state back to Supabase
+        if (isHost) {
+          Store.save();
+        } else {
+          UI.syncHeaderIndicators();
+        }
 
         const stage = document.getElementById('draw-overlay-stage');
         stage.innerHTML = `
@@ -3312,6 +3340,16 @@
             </div>
           </div>
         `;
+
+        // Automatically close the summary screen on viewer devices after 8 seconds
+        if (!isHost) {
+          const autoCloseTimer = setTimeout(() => {
+            if (Store.uiState.isDrawInProgress) {
+              this.closeBroadcastAndResume();
+            }
+          }, 8000);
+          this.activeTimers.push(autoCloseTimer);
+        }
       },
 
       closeBroadcastAndResume() {
@@ -3325,15 +3363,17 @@
 
     window.GameEngine = GameEngine;
 
-    /* =====================================================================
-       11. BOOTSTRAP APPLICATION ON WINDOW LOAD
-       ===================================================================== */
+    // Initialize store and start polling for remote draw broadcasts on load
     window.onload = function () {
       Store.init();
       UI.switchTab('public');
+
+      setInterval(() => {
+        GameEngine.checkForRemoteDraw();
+      }, 1000);
     };
   </script>
   <!-- Cloud Sync Bridge connecting Store to Supabase -->
-<script src="./supabase-bridge.js"></script>
+  <script src="./supabase-bridge.js"></script>
 </body>
 </html>
