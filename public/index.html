@@ -59,16 +59,33 @@
     }
 
     @keyframes marqueeScroll {
-      0% { transform: translateX(100%); }
-      100% { transform: translateX(-100%); }
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
     }
     .marquee-track {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 3rem;
       white-space: nowrap;
-      animation: marqueeScroll 28s linear infinite;
+      width: max-content;
+      animation: marqueeScroll 55s linear infinite;
+      will-change: transform;
     }
-    .marquee-track:hover {
+    .marquee-track:hover,
+    .marquee-track:active {
       animation-play-state: paused;
+    }
+    @media (max-width: 640px) {
+      .marquee-track {
+        animation-duration: 70s;
+        gap: 2rem;
+        font-size: 0.8125rem;
+        line-height: 1.35;
+      }
+      .marquee-viewport {
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 8px, #000 calc(100% - 8px), transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 8px, #000 calc(100% - 8px), transparent);
+      }
     }
 
     /* Slot tumbler & winner celebration visual states */
@@ -98,15 +115,22 @@
        then stays visible across all tabs without blocking UI until replaced
        by the next completed draw.
        ===================================================================== -->
-  <div id="global-marquee-container" class="hidden bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border-b border-amber-400/40 text-amber-200 text-xs sm:text-sm py-2 px-4 overflow-hidden relative z-30">
-    <div class="max-w-7xl mx-auto flex items-center gap-3">
-      <span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
-        <i class="fa-solid fa-trophy"></i> Official Draw Result
-      </span>
-      <div class="overflow-hidden flex-1 relative">
-        <div id="global-marquee-content" class="marquee-track font-medium"></div>
+  <div id="global-marquee-container" class="hidden bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border-b border-amber-400/40 text-amber-100 relative z-30">
+    <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 sm:py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+      <div class="flex items-center justify-between gap-2 shrink-0">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
+          <i class="fa-solid fa-trophy"></i>
+          <span class="sm:hidden">Draw Result</span>
+          <span class="hidden sm:inline">Official Draw Result</span>
+        </span>
+        <button type="button" onclick="UI.JumpToEventFromMarquee()" class="sm:hidden text-[11px] bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded-lg transition font-semibold">
+          View Board
+        </button>
       </div>
-      <button onclick="UI.JumpToEventFromMarquee()" class="shrink-0 text-xs bg-slate-900/80 hover:bg-slate-800 text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded transition">
+      <div class="marquee-viewport overflow-hidden flex-1 min-w-0 relative py-0.5">
+        <div id="global-marquee-content" class="marquee-track font-medium text-sm sm:text-sm"></div>
+      </div>
+      <button type="button" onclick="UI.JumpToEventFromMarquee()" class="hidden sm:inline-flex shrink-0 text-xs bg-slate-900/80 hover:bg-slate-800 text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded transition">
         View Board
       </button>
     </div>
@@ -924,12 +948,19 @@
           const winnerPills = m.winners
             .map(w => `Slot #${String(w.slotNumber).padStart(2, '0')} → ${this.escapeHtml(w.rankLabel)} (${this.escapeHtml(w.description)})`)
             .join('   ★   ');
-          marqueeContent.innerHTML = `
-            <span class="font-bold text-white">CONGRATULATIONS!</span>
-            Official Draw Complete for <span class="text-emerald-300 font-bold">"${this.escapeHtml(m.eventName)}"</span>
-            — Winning Slots: <span class="text-amber-300 font-mono">${winnerPills}</span>
-            — Coordinate with your community agent for prize verification &amp; release!
+          const segment = `
+            <span class="inline-flex items-center gap-2 px-1">
+              <span class="font-bold text-white">CONGRATULATIONS!</span>
+              <span>Official Draw Complete for <span class="text-emerald-300 font-bold">"${this.escapeHtml(m.eventName)}"</span></span>
+              <span class="text-amber-200/80">—</span>
+              <span>Winning Slots: <span class="text-amber-300 font-mono font-semibold">${winnerPills}</span></span>
+              <span class="text-amber-200/80">—</span>
+              <span>Coordinate with your community agent for prize verification &amp; release!</span>
+              <span class="text-amber-400/70 px-2">★ ★ ★</span>
+            </span>
           `;
+          // Duplicate segment for seamless loop (animation moves -50%)
+          marqueeContent.innerHTML = segment + segment;
           marqueeContainer.classList.remove('hidden');
         } else {
           marqueeContainer.classList.add('hidden');
