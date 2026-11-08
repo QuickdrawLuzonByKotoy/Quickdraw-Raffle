@@ -120,9 +120,14 @@
               <i class="fa-solid fa-ticket-simple text-xl -rotate-12"></i>
             </div>
             <div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">Quickdraw</h1>
                 <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">v2.5 Engine</span>
+                <!-- Live Cloud Sync & Connection Health Indicator -->
+                <button id="sync-status-pill" type="button" onclick="SyncGuard.manualRetry()" title="Click to force cloud sync now" class="inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 transition hover:bg-emerald-500/25">
+                  <span id="sync-status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span id="sync-status-text">Cloud Synced</span>
+                </button>
               </div>
               <p class="text-xs sm:text-sm text-slate-400 font-medium">Community helping communities</p>
             </div>
@@ -223,12 +228,15 @@
 
   <script>
     /**
-     * Quickdraw Platform State & View Controllers
+     * Quickdraw Platform State, Offline Sync Guard & View Controllers
      * - Clean initialization: no hardcoded users or sample events
+     * - Offline Sync Guard: queues local sales and credential updates if signal drops,
+     *   protects against refresh overwrites, and auto-retries when connection returns
      * - Live draw sync: uses both Supabase Realtime broadcast and standard `drawnAt` timestamps
      */
 
     const STORAGE_KEY = 'QUICKDRAW_DB_V3';
+    const PENDING_SYNC_KEY = 'QUICKDRAW_PENDING_SYNC_V1';
 
     // Intercepts supabase.createClient when supabase-bridge.js loads so we can attach
     // a real-time broadcast channel for live draws without duplicating credentials.
@@ -243,6 +251,262 @@
         return client;
       };
     }
+
+    /* =====================================================================
+       OFFLINE SYNC GUARD & AUTO-RETRY QUEUE FOR INTERMITTENT CONNECTIONS
+       ===================================================================== */
+    const SyncGuard = {
+      hasPendingChanges: false,
+      isRetrying: false,
+      inFlightWrites: 0,
+      lastWriteSucceededAt: null,
+
+      init() {
+        // Check if there was an un-uploaded snapshot from before a page refresh
+        try {
+          const pendingRaw = localStorage.getItem(PENDING_SYNC_KEY);
+          if (pendingRaw) {
+            this.hasPendingChanges = true;
+          }
+        } catch (_) {}
+
+        this.installFetchMonitor();
+
+        window.addEventListener('online', () => {
+          this.updatePillUI();
+          if (this.hasPendingChanges) {
+            UI.notify('Connection restored — syncing pending changes to cloud...', 'info');
+            this.retryPendingSave();
+          }
+        });
+
+        window.addEventListener('offline', () => {
+          this.updatePillUI();
+          UI.notify('You are currently offline. Changes are saved to your device and will upload automatically when signal returns.', 'warning');
+        });
+
+        // Warn user if they try to close the tab while a sale is still waiting for signal
+        window.addEventListener('beforeunload', (e) => {
+          if (this.hasPendingChanges && !navigator.onLine) {
+            e.preventDefault();
+            e.returnValue = '';
+          }
+        });
+
+        // Background retry loop every 4 seconds for intermittent mobile data
+        setInterval(() => {
+          if (this.hasPendingChanges && navigator.onLine && !this.isRetrying) {
+            this.retryPendingSave();
+          }
+        }, 4000);
+
+        this.updatePillUI();
+      },
+
+      // Monitors fetch requests to Supabase so we know when cloud writes succeed or fail
+      installFetchMonitor() {
+        if (!window.fetch || window.__qdFetchMonitored) return;
+        window.__qdFetchMonitored = true;
+        const nativeFetch = window.fetch.bind(window);
+
+        window.fetch = async (...args) => {
+          const reqUrl = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+          const method = (args[1]?.method || (typeof args[0] === 'object' && args[0]?.method) || 'GET').toUpperCase();
+          const isSupabaseRest = reqUrl.includes('.supabase.co/rest/v1/');
+          const isWrite = isSupabaseRest && (method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE');
+
+          if (isWrite) {
+            this.inFlightWrites++;
+            this.updatePillUI();
+          }
+
+          try {
+            const response = await nativeFetch(...args);
+            if (isWrite) {
+              this.inFlightWrites = Math.max(0, this.inFlightWrites - 1);
+              if (response.ok) {
+                if (this.inFlightWrites === 0) {
+                  this.markSynced();
+                }
+              } else {
+                this.markPending();
+              }
+              this.updatePillUI();
+            }
+            return response;
+          } catch (err) {
+            if (isWrite) {
+              this.inFlightWrites = Math.max(0, this.inFlightWrites - 1);
+              this.markPending();
+              this.updatePillUI();
+            }
+            throw err;
+          }
+        };
+      },
+
+      // Called whenever Store.save() is triggered by a user action
+      queueSnapshot(dbState) {
+        if (!dbState) return;
+        this.hasPendingChanges = true;
+        try {
+          localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify({
+            queuedAt: Date.now(),
+            db: dbState
+          }));
+        } catch (_) {}
+        this.updatePillUI();
+      },
+
+      markPending() {
+        this.hasPendingChanges = true;
+        if (Store.db) {
+          try {
+            localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify({
+              queuedAt: Date.now(),
+              db: Store.db
+            }));
+          } catch (_) {}
+        }
+        this.updatePillUI();
+      },
+
+      markSynced() {
+        this.hasPendingChanges = false;
+        this.lastWriteSucceededAt = Date.now();
+        try {
+          localStorage.removeItem(PENDING_SYNC_KEY);
+        } catch (_) {}
+        this.updatePillUI();
+      },
+
+      // Merges any un-uploaded local changes if the user refreshed the page during a connection drop
+      restorePendingIfNewer() {
+        try {
+          const raw = localStorage.getItem(PENDING_SYNC_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (!parsed || !parsed.db) return;
+
+          const pendingDb = parsed.db;
+          if (!Store.db) {
+            Store.db = pendingDb;
+            return;
+          }
+
+          // Merge users (preserve any newly created accounts or updated passwords)
+          if (Array.isArray(pendingDb.users)) {
+            const userMap = new Map();
+            (Store.db.users || []).forEach(u => userMap.set(u.id, u));
+            pendingDb.users.forEach(u => userMap.set(u.id, u));
+            Store.db.users = Array.from(userMap.values());
+          }
+
+          // Merge events and sold slots so offline slot sales are never lost on refresh
+          if (Array.isArray(pendingDb.events)) {
+            const eventMap = new Map();
+            (Store.db.events || []).forEach(ev => eventMap.set(ev.id, ev));
+            pendingDb.events.forEach(pendingEv => {
+              const existingEv = eventMap.get(pendingEv.id);
+              if (!existingEv) {
+                eventMap.set(pendingEv.id, pendingEv);
+              } else {
+                // Keep sold slots from either copy
+                const mergedSlots = (existingEv.slots || []).map(slot => {
+                  const pSlot = (pendingEv.slots || []).find(s => s.slotNumber === slot.slotNumber);
+                  if (pSlot && pSlot.status === 'sold' && slot.status !== 'sold') {
+                    return pSlot;
+                  }
+                  return slot;
+                });
+                existingEv.slots = mergedSlots;
+                if (pendingEv.status !== 'selling' && existingEv.status === 'selling') {
+                  existingEv.status = pendingEv.status;
+                  existingEv.endorsedAt = pendingEv.endorsedAt || existingEv.endorsedAt;
+                  existingEv.drawnAt = pendingEv.drawnAt || existingEv.drawnAt;
+                  existingEv.archivedAt = pendingEv.archivedAt || existingEv.archivedAt;
+                }
+                if (Array.isArray(pendingEv.prizes)) {
+                  existingEv.prizes = pendingEv.prizes;
+                }
+              }
+            });
+            Store.db.events = Array.from(eventMap.values());
+          }
+
+          // Merge proposals
+          if (Array.isArray(pendingDb.proposals)) {
+            const propMap = new Map();
+            (Store.db.proposals || []).forEach(p => propMap.set(p.id, p));
+            pendingDb.proposals.forEach(p => propMap.set(p.id, p));
+            Store.db.proposals = Array.from(propMap.values());
+          }
+
+          // Merge transactions
+          if (Array.isArray(pendingDb.transactions)) {
+            const txMap = new Map();
+            (Store.db.transactions || []).forEach(t => txMap.set(t.id, t));
+            pendingDb.transactions.forEach(t => txMap.set(t.id, t));
+            Store.db.transactions = Array.from(txMap.values());
+          }
+        } catch (err) {
+          console.warn('Pending queue merge skipped:', err);
+        }
+      },
+
+      retryPendingSave() {
+        if (!Store.db || this.isRetrying) return;
+        this.isRetrying = true;
+        this.restorePendingIfNewer();
+        this.updatePillUI();
+
+        try {
+          // Trigger Store.save() which invokes supabase-bridge's hooked save handler
+          Store.save(true);
+        } catch (_) {}
+
+        setTimeout(() => {
+          this.isRetrying = false;
+          this.updatePillUI();
+        }, 1500);
+      },
+
+      manualRetry() {
+        if (!navigator.onLine) {
+          UI.notify('Still offline. Please check your mobile data or Wi-Fi connection.', 'warning');
+          return;
+        }
+        this.retryPendingSave();
+        UI.notify('Triggered cloud synchronization check.', 'info');
+      },
+
+      updatePillUI() {
+        const pill = document.getElementById('sync-status-pill');
+        const dot = document.getElementById('sync-status-dot');
+        const text = document.getElementById('sync-status-text');
+        if (!pill || !dot || !text) return;
+
+        if (!navigator.onLine) {
+          pill.className = 'inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 transition';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse';
+          text.textContent = this.hasPendingChanges ? 'Offline — Changes Saved to Device' : 'Offline Mode';
+        } else if (this.inFlightWrites > 0 || this.isRetrying) {
+          pill.className = 'inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 transition';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping';
+          text.textContent = 'Syncing to Cloud...';
+        } else if (this.hasPendingChanges) {
+          pill.className = 'inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 transition';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse';
+          text.textContent = 'Pending Sync — Auto-Retrying';
+        } else {
+          pill.className = 'inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 transition hover:bg-emerald-500/25';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+          text.textContent = 'Cloud Synced';
+        }
+      }
+    };
+
+    window.SyncGuard = SyncGuard;
 
     function buildSeedDatabase() {
       const now = Date.now();
@@ -303,13 +567,22 @@
           console.error('Database initialization fallback triggered:', err);
           this.db = buildSeedDatabase();
         }
+
+        // Restore any pending offline sales if the user refreshed before signal returned
+        SyncGuard.restorePendingIfNewer();
       },
 
-      save() {
+      save(isRetryAttempt = false) {
         if (!this.db) return;
         this.db.meta = this.db.meta || {};
         this.db.meta.fromSeed = false;
         this.db.meta.lastUpdated = new Date().toISOString();
+
+        // Queue snapshot in SyncGuard so intermittent signal drops never lose data
+        if (!isRetryAttempt) {
+          SyncGuard.queueSnapshot(this.db);
+        }
+
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
         } catch (err) {
@@ -528,6 +801,11 @@
       },
 
       renderCurrentTab() {
+        // Protect any unsynced local changes from being overwritten if a background poll just arrived
+        if (SyncGuard.hasPendingChanges) {
+          SyncGuard.restorePendingIfNewer();
+        }
+
         this.syncHeaderIndicators();
         // Do not overwrite background views while a draw overlay is running
         if (Store.uiState.isDrawInProgress) return;
@@ -3446,6 +3724,7 @@
     window.GameEngine = GameEngine;
 
     window.onload = function () {
+      SyncGuard.init();
       Store.init();
       if (window.__qdSupabaseClient) {
         GameEngine.attachRealtimeChannel(window.__qdSupabaseClient);
