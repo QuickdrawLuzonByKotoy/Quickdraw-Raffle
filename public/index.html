@@ -300,11 +300,8 @@
      */
 
     const STORAGE_KEY = 'QUICKDRAW_DB_V3';
-    const SUPERADMIN_STATIC = Object.freeze({
-      username: 'kotoy',
-      password: 'IamwhoIam1!',
-      role: 'superadmin'
-    });
+    // Superadmin is a normal row in Store.db.users (role: 'superadmin'), synced via Supabase.
+    // Seed creates the initial account; login always checks the live users list.
 
     /* =====================================================================
        1. INITIAL SEED DATA GENERATOR
@@ -659,6 +656,7 @@
         agent: null,
         manager: null,
         superadmin: false,
+        superadminUserId: null,
         vaultUnlocked: false
       },
 
@@ -755,6 +753,22 @@
 
       getSoldCount(event) {
         return event.slots.filter(s => s.status === 'sold').length;
+      },
+
+      /**
+       * Authenticate superadmin against live users (Supabase-synced Store.db.users).
+       * Returns the user record on success, otherwise null.
+       */
+      authenticateSuperadmin(username, password) {
+        const u = (username || '').trim();
+        const p = (password || '').trim();
+        if (!u || !p || !this.db || !Array.isArray(this.db.users)) return null;
+        return this.db.users.find(user =>
+          user.role === 'superadmin' &&
+          user.active !== false &&
+          String(user.username).toLowerCase() === u.toLowerCase() &&
+          String(user.password) === p
+        ) || null;
       }
     };
 
@@ -2250,10 +2264,12 @@
       login() {
         const u = (document.getElementById('sa-login-user')?.value ?? '').trim();
         const p = (document.getElementById('sa-login-pass')?.value ?? '').trim();
+        const account = Store.authenticateSuperadmin(u, p);
 
-        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+        if (account) {
           Store.sessions.superadmin = true;
-          UI.notify('Superadmin session authenticated.', 'success');
+          Store.sessions.superadminUserId = account.id;
+          UI.notify('Superadmin session authenticated (' + account.displayName + ').', 'success');
           this.render();
         } else {
           UI.notify('Access Denied: Invalid Superadmin credentials.', 'error');
@@ -2262,6 +2278,7 @@
 
       logout() {
         Store.sessions.superadmin = false;
+        Store.sessions.superadminUserId = null;
         Store.sessions.vaultUnlocked = false;
         UI.notify('Superadmin logged out.', 'info');
         this.render();
@@ -2659,7 +2676,7 @@
       unlockDatabaseVault() {
         const u = (document.getElementById('vault-auth-user')?.value || '').trim();
         const p = (document.getElementById('vault-auth-pass')?.value || '').trim();
-        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+        if (Store.authenticateSuperadmin(u, p)) {
           Store.sessions.vaultUnlocked = true;
           UI.notify('Database Vault unlocked for viewing, copying, and archive export.', 'success');
           this.render();
@@ -3107,12 +3124,14 @@
       loginFromStudio() {
         const u = (document.getElementById('draw-login-user')?.value || '').trim();
         const p = (document.getElementById('draw-login-pass')?.value || '').trim();
-        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+        const account = Store.authenticateSuperadmin(u, p);
+        if (account) {
           Store.sessions.superadmin = true;
+          Store.sessions.superadminUserId = account.id;
           UI.notify('Superadmin verified for Live Draw Studio.', 'success');
           this.render();
         } else {
-          UI.notify('Only the Superadmin account can authorize and trigger official raffle draws.', 'error');
+          UI.notify('Only an active Superadmin account can authorize and trigger official raffle draws.', 'error');
         }
       },
 
