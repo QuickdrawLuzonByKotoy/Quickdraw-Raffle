@@ -1,0 +1,3508 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quickdraw — Community helping communities</title>
+  <!-- Tailwind CSS CDN for utility styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter for UI, JetBrains Mono for slot counters/timers -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <!-- Font Awesome for clean iconography -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              900: '#064e3b',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Custom scrollbars and marquee keyframes */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    @keyframes marqueeScroll {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+    .marquee-track {
+      display: inline-block;
+      white-space: nowrap;
+      animation: marqueeScroll 28s linear infinite;
+    }
+    .marquee-track:hover {
+      animation-play-state: paused;
+    }
+
+    /* Slot tumbler & winner celebration visual states */
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.45), inset 0 0 15px rgba(16, 185, 129, 0.25); }
+      50% { box-shadow: 0 0 55px rgba(245, 158, 11, 0.75), inset 0 0 25px rgba(245, 158, 11, 0.35); }
+    }
+    .draw-tumbler-box {
+      animation: pulseGlow 1.6s ease-in-out infinite;
+    }
+
+    @keyframes winnerScale {
+      0% { transform: scale(0.8); opacity: 0; }
+      60% { transform: scale(1.06); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .winner-card-reveal {
+      animation: winnerScale 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col selection:bg-emerald-500 selection:text-slate-950">
+
+  <!-- =====================================================================
+       PERSISTENT TOP CONGRATULATORY MARQUEE BANNER
+       Hidden until at least one Live Draw completes during platform operation,
+       then stays visible across all tabs without blocking UI until replaced
+       by the next completed draw.
+       ===================================================================== -->
+  <div id="global-marquee-container" class="hidden bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border-b border-amber-400/40 text-amber-200 text-xs sm:text-sm py-2 px-4 overflow-hidden relative z-30">
+    <div class="max-w-7xl mx-auto flex items-center gap-3">
+      <span class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
+        <i class="fa-solid fa-trophy"></i> Official Draw Result
+      </span>
+      <div class="overflow-hidden flex-1 relative">
+        <div id="global-marquee-content" class="marquee-track font-medium"></div>
+      </div>
+      <button onclick="UI.JumpToEventFromMarquee()" class="shrink-0 text-xs bg-slate-900/80 hover:bg-slate-800 text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded transition">
+        View Board
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MAIN PLATFORM HEADER & 5-TAB NAVIGATION BAR
+       ===================================================================== -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between py-3.5 gap-3">
+        <!-- Brand Identity -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 cursor-pointer" onclick="UI.switchTab('public')">
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20">
+              <i class="fa-solid fa-ticket-simple text-xl -rotate-12"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">Quickdraw</h1>
+                <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">v2.5 Engine</span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-400 font-medium">Community helping communities</p>
+            </div>
+          </div>
+
+          <!-- Active Session Indicator (Mobile) -->
+          <div id="mobile-session-pill" class="md:hidden"></div>
+        </div>
+
+        <!-- 5 Navigation Tabs -->
+        <nav class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar" aria-label="Main Navigation">
+          <button id="tab-btn-public" onclick="UI.switchTab('public')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
+            <i class="fa-solid fa-table-cells-large"></i>
+            <span>1. Raffle Events</span>
+          </button>
+          <button id="tab-btn-agent" onclick="UI.switchTab('agent')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
+            <i class="fa-solid fa-user-tag"></i>
+            <span>2. Agent Portal</span>
+            <span id="agent-nav-badge" class="hidden w-2 h-2 rounded-full bg-amber-400"></span>
+          </button>
+          <button id="tab-btn-manager" onclick="UI.switchTab('manager')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
+            <i class="fa-solid fa-briefcase"></i>
+            <span>3. Manager Portal</span>
+          </button>
+          <button id="tab-btn-superadmin" onclick="UI.switchTab('superadmin')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>4. Superadmin</span>
+          </button>
+          <button id="tab-btn-draw" onclick="UI.switchTab('draw')" class="nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap">
+            <i class="fa-solid fa-bolt text-amber-400"></i>
+            <span>5. Live Draw Studio</span>
+            <span id="endorsed-count-badge" class="hidden px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-amber-400 text-slate-950 font-bold">0</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- =====================================================================
+       MAIN APPLICATION WORKSPACE (5 TAB VIEWS)
+       ===================================================================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- TAB 1: PUBLIC RAFFLE EVENTS -->
+    <section id="view-public" class="tab-view space-y-6"></section>
+
+    <!-- TAB 2: AGENT PORTAL -->
+    <section id="view-agent" class="tab-view hidden space-y-6"></section>
+
+    <!-- TAB 3: MANAGER PORTAL -->
+    <section id="view-manager" class="tab-view hidden space-y-6"></section>
+
+    <!-- TAB 4: SUPERADMIN PORTAL -->
+    <section id="view-superadmin" class="tab-view hidden space-y-6"></section>
+
+    <!-- TAB 5: LIVE DRAW STUDIO -->
+    <section id="view-draw" class="tab-view hidden space-y-6"></section>
+
+  </main>
+
+  <!-- =====================================================================
+       GLOBAL LIVE DRAW LOCK OVERLAY
+       During an active raffle draw, all dashboards, slot sales, and tabs
+       are paused and locked behind this full-screen broadcast view.
+       Strictly no PII (nicknames or phone numbers) is rendered here.
+       ===================================================================== -->
+  <div id="live-draw-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-8 overflow-y-auto">
+    <!-- Top Broadcast Header -->
+    <div class="max-w-5xl w-full mx-auto flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/50 text-red-400 text-xs font-bold uppercase tracking-widest animate-pulse">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span> Live Official Draw Broadcast
+        </span>
+        <span class="text-xs text-slate-400 hidden sm:inline">All platform transactions &amp; dashboards are temporarily paused during drawing</span>
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-slate-400 uppercase tracking-wider">Quickdraw Game Engine</div>
+        <div id="draw-overlay-event-title" class="text-base sm:text-lg font-bold text-white"></div>
+      </div>
+    </div>
+
+    <!-- Center Stage: Active Tumbler or Final Summary -->
+    <div id="draw-overlay-stage" class="max-w-4xl w-full mx-auto my-auto py-6 text-center"></div>
+
+    <!-- Bottom Progress Bar & Drawn Prizes Strip -->
+    <div class="max-w-5xl w-full mx-auto border-t border-slate-800 pt-4">
+      <div id="draw-overlay-Dock" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       REUSABLE MODAL CONTAINER (Slot Inspection, Confirmations, Forms)
+       ===================================================================== -->
+  <div id="app-modal-backdrop" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div id="app-modal-card" class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">
+        <h3 id="app-modal-title" class="text-lg font-bold text-white">Modal Title</h3>
+        <button onclick="UI.closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div id="app-modal-body" class="text-sm text-slate-300 space-y-3"></div>
+      <div id="app-modal-footer" class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       TOAST NOTIFICATION STACK
+       ===================================================================== -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- =====================================================================
+       FOOTER
+       ===================================================================== -->
+  <footer class="border-t border-slate-900 bg-slate-950 py-5 px-4 text-xs text-slate-500 mt-12">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div>
+        <strong class="text-slate-300">Quickdraw</strong> — Community helping communities. Designed for GitHub Codespaces deployment.
+      </div>
+      <div class="flex items-center gap-4">
+        <span>Zero Public PII Policy</span>
+        <span>•</span>
+        <span>Role-Isolated Hierarchy</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- =====================================================================
+       APPLICATION ENGINE, DATABASE LAYER, AND VIEW CONTROLLERS
+       ===================================================================== -->
+  <script>
+    /**
+     * QUICKDRAW PLATFORM ARCHITECTURE
+     * -----------------------------------------------------------------------
+     * 1. Storage & Schema (`STORAGE_KEY = 'QUICKDRAW_DB_V3'`):
+     *    - `users`: Superadmin (static check + record), Managers, and Agents.
+     *    - `events`: Raffle draws with lifecycle states:
+     *        'selling'  -> Agents can sell open slots.
+     *        'endorsed' -> 100% slots sold & Manager verified payment; queued for draw.
+     *        'drawn'    -> Live draw finished; winning slots have `releaseStatus`:
+     *                      'pending_release' ("For Release") or 'released' ("Released").
+     *        'archived' -> Automatically transitioned when ALL prizes in a drawn
+     *                      event reach `releaseStatus === 'released'`.
+     *    - `proposals`: Manager-submitted event endorsements awaiting Superadmin action.
+     *    - `transactions`: Audit log of individual and batch slot purchases.
+     */
+
+    const STORAGE_KEY = 'QUICKDRAW_DB_V3';
+    const SUPERADMIN_STATIC = Object.freeze({
+      username: 'kotoy',
+      password: 'IamwhoIam1!',
+      role: 'superadmin'
+    });
+
+    /* =====================================================================
+       1. INITIAL SEED DATA GENERATOR
+       ===================================================================== */
+    function buildSeedDatabase() {
+      const now = Date.now();
+      const hour = 3600 * 1000;
+
+      function createSlotsArray(total, soldUpTo, defaultAgentId, nicknamePrefix) {
+        const slots = [];
+        for (let i = 1; i <= total; i++) {
+          if (i <= soldUpTo) {
+            slots.push({
+              slotNumber: i,
+              status: 'sold',
+              buyerNickname: `${nicknamePrefix}_${String(i).padStart(2, '0')}`,
+              buyerPhone: `0917-${String(100 + i).padStart(3, '0')}-${String(1000 + i * 7).slice(0, 4)}`,
+              agentId: defaultAgentId,
+              soldAt: new Date(now - (total - i) * 1800000).toISOString(),
+              txId: `tx_seed_${defaultAgentId}_${i}`
+            });
+          } else {
+            slots.push({
+              slotNumber: i,
+              status: 'available',
+              buyerNickname: null,
+              buyerPhone: null,
+              agentId: null,
+              soldAt: null,
+              txId: null
+            });
+          }
+        }
+        return slots;
+      }
+
+      return {
+        meta: {
+          version: '2.5.0',
+          seededAt: new Date(now).toISOString(),
+          lastUpdated: new Date(now).toISOString()
+        },
+        marquee: null,
+
+        users: [
+          {
+            id: 'usr_superadmin',
+            username: 'kotoy',
+            password: 'IamwhoIam1!',
+            role: 'superadmin',
+            displayName: 'Kotoy (Superadmin)',
+            bracketName: 'Global Command',
+            managerId: null,
+            active: true,
+            createdAt: new Date(now - 72 * hour).toISOString()
+          },
+          {
+            id: 'mgr_north',
+            username: 'mgr_north',
+            password: 'NorthPass1!',
+            role: 'manager',
+            displayName: 'Elena Reyes — North Bracket',
+            bracketName: 'North Luzon Community Bracket',
+            managerId: null,
+            active: true,
+            createdAt: new Date(now - 60 * hour).toISOString()
+          },
+          {
+            id: 'mgr_south',
+            username: 'mgr_south',
+            password: 'SouthPass1!',
+            role: 'manager',
+            displayName: 'Marco Dizon — South Bracket',
+            bracketName: 'South Metro Community Bracket',
+            managerId: null,
+            active: true,
+            createdAt: new Date(now - 58 * hour).toISOString()
+          },
+          {
+            id: 'agent_leo',
+            username: 'agent_leo',
+            password: 'LeoPass1!',
+            role: 'agent',
+            displayName: 'Agent Leo (North)',
+            bracketName: 'North Luzon Community Bracket',
+            managerId: 'mgr_north',
+            active: true,
+            createdAt: new Date(now - 48 * hour).toISOString()
+          },
+          {
+            id: 'agent_maya',
+            username: 'agent_maya',
+            password: 'MayaPass1!',
+            role: 'agent',
+            displayName: 'Agent Maya (North)',
+            bracketName: 'North Luzon Community Bracket',
+            managerId: 'mgr_north',
+            active: true,
+            createdAt: new Date(now - 46 * hour).toISOString()
+          },
+          {
+            id: 'agent_sam',
+            username: 'agent_sam',
+            password: 'SamPass1!',
+            role: 'agent',
+            displayName: 'Agent Sam (South)',
+            bracketName: 'South Metro Community Bracket',
+            managerId: 'mgr_south',
+            active: true,
+            createdAt: new Date(now - 44 * hour).toISOString()
+          }
+        ],
+
+        events: [
+          // 1. SELLING EVENT (18/20 slots sold so Agent can sell the last 2 slots #19 & #20)
+          {
+            id: 'evt_selling_01',
+            name: 'Community Harvest Grocery & Cash Bonanza',
+            managerId: 'mgr_north',
+            bracketName: 'North Luzon Community Bracket',
+            totalSlots: 20,
+            pricePerSlot: 150,
+            status: 'selling',
+            paymentVerified: false,
+            endorsedAt: null,
+            drawnAt: null,
+            archivedAt: null,
+            createdAt: new Date(now - 24 * hour).toISOString(),
+            prizes: [
+              {
+                prizeId: 'prz_101',
+                rankLabel: '1st Prize — Grand Basket + ₱1,500 Cash',
+                description: 'Full family grocery sack (25kg rice + pantry bundle) + ₱1,500 cash assistance',
+                preferredSlot: 7,
+                winningSlot: null,
+                releaseStatus: 'pending_release',
+                releasedByAgentId: null,
+                releasedAt: null
+              },
+              {
+                prizeId: 'prz_102',
+                rankLabel: '2nd Prize — Community Pantry Pack',
+                description: '10kg premium rice + assorted canned goods pack',
+                preferredSlot: null,
+                winningSlot: null,
+                releaseStatus: 'pending_release',
+                releasedByAgentId: null,
+                releasedAt: null
+              }
+            ],
+            slots: createSlotsArray(20, 18, 'agent_leo', 'KuyaBen')
+          },
+
+          // 2. ENDORSED FOR DRAWING EVENT (100% 25/25 sold, ready for immediate 8s+10s Live Draw)
+          {
+            id: 'evt_endorsed_02',
+            name: 'Barangay Fiesta Mega Tech & Sari-Sari Draw',
+            managerId: 'mgr_north',
+            bracketName: 'North Luzon Community Bracket',
+            totalSlots: 25,
+            pricePerSlot: 200,
+            status: 'endorsed',
+            paymentVerified: true,
+            endorsedAt: new Date(now - 2 * hour).toISOString(),
+            drawnAt: null,
+            archivedAt: null,
+            createdAt: new Date(now - 30 * hour).toISOString(),
+            prizes: [
+              {
+                prizeId: 'prz_201',
+                rankLabel: 'Grand Prize — Smart 5G Tablet + Load Wallet',
+                description: 'Brand new 11-inch Wi-Fi/5G Tablet + ₱1,000 retailer e-load starter wallet',
+                preferredSlot: 14,
+                winningSlot: null,
+                releaseStatus: 'pending_release',
+                releasedByAgentId: null,
+                releasedAt: null
+              },
+              {
+                prizeId: 'prz_202',
+                rankLabel: 'Runner-Up Prize — Heavy Duty Blender + Rice Cooker',
+                description: 'Commercial-grade countertop blender and 1.8L family rice cooker set',
+                preferredSlot: null,
+                winningSlot: null,
+                releaseStatus: 'pending_release',
+                releasedByAgentId: null,
+                releasedAt: null
+              }
+            ],
+            slots: createSlotsArray(25, 25, 'agent_maya', 'AteJoy')
+          },
+
+          // 3. DRAWN EVENT (1 prize Released, 1 prize still For Release -> Agent can toggle to auto-archive)
+          {
+            id: 'evt_drawn_03',
+            name: 'Sunday Market Livelihood Starter Bundle',
+            managerId: 'mgr_north',
+            bracketName: 'North Luzon Community Bracket',
+            totalSlots: 20,
+            pricePerSlot: 100,
+            status: 'drawn',
+            paymentVerified: true,
+            endorsedAt: new Date(now - 14 * hour).toISOString(),
+            drawnAt: new Date(now - 10 * hour).toISOString(),
+            archivedAt: null,
+            createdAt: new Date(now - 40 * hour).toISOString(),
+            prizes: [
+              {
+                prizeId: 'prz_301',
+                rankLabel: '1st Prize — Street Food Cart Burner & Cookware Kit',
+                description: 'Dual stainless burner, deep fryer vat, and ₱500 initial capital voucher',
+                preferredSlot: 5,
+                winningSlot: 5,
+                releaseStatus: 'released',
+                releasedByAgentId: 'agent_leo',
+                releasedAt: new Date(now - 6 * hour).toISOString()
+              },
+              {
+                prizeId: 'prz_302',
+                rankLabel: '2nd Prize — 25kg Premium Sinandomeng Sack',
+                description: 'One full 25kg sack of newly harvested Sinandomeng rice',
+                preferredSlot: null,
+                winningSlot: 12,
+                releaseStatus: 'pending_release',
+                releasedByAgentId: null,
+                releasedAt: null
+              }
+            ],
+            slots: createSlotsArray(20, 20, 'agent_leo', 'MangToni')
+          },
+
+          // 4. ARCHIVED / HISTORY EVENT (All prizes released)
+          {
+            id: 'evt_archived_04',
+            name: 'Back-to-School Community Study Desk Drive',
+            managerId: 'mgr_south',
+            bracketName: 'South Metro Community Bracket',
+            totalSlots: 15,
+            pricePerSlot: 120,
+            status: 'archived',
+            paymentVerified: true,
+            endorsedAt: new Date(now - 50 * hour).toISOString(),
+            drawnAt: new Date(now - 48 * hour).toISOString(),
+            archivedAt: new Date(now - 36 * hour).toISOString(),
+            createdAt: new Date(now - 70 * hour).toISOString(),
+            prizes: [
+              {
+                prizeId: 'prz_401',
+                rankLabel: '1st Prize — Study Table + Rechargeable LED Lamp + Backpack',
+                description: 'Ergonomic folding study desk, rechargeable emergency lamp, and school supply set',
+                preferredSlot: null,
+                winningSlot: 9,
+                releaseStatus: 'released',
+                releasedByAgentId: 'agent_sam',
+                releasedAt: new Date(now - 38 * hour).toISOString()
+              },
+              {
+                prizeId: 'prz_402',
+                rankLabel: '2nd Prize — Scientific Calculator & Art Kit',
+                description: 'Casio-grade scientific calculator + complete drawing and geometry set',
+                preferredSlot: null,
+                winningSlot: 3,
+                releaseStatus: 'released',
+                releasedByAgentId: 'agent_sam',
+                releasedAt: new Date(now - 36 * hour).toISOString()
+              }
+            ],
+            slots: createSlotsArray(15, 15, 'agent_sam', 'NanayLuz')
+          }
+        ],
+
+        proposals: [
+          {
+            id: 'prop_seed_01',
+            managerId: 'mgr_south',
+            type: 'create',
+            targetEventId: null,
+            proposedName: 'Weekend Tricycle Drivers Fuel & Maintenance Raffle',
+            proposedSlots: 30,
+            proposedPrice: 100,
+            proposedPrizes: '1st Prize: ₱1,500 Fuel Voucher + Change Oil Kit | 2nd Prize: Heavy Duty Tire Pump',
+            notes: 'All 30 slots pre-subscribed by South Metro TODA members; ready for draw.',
+            status: 'pending',
+            createdAt: new Date(now - 5 * hour).toISOString()
+          }
+        ],
+
+        transactions: [
+          {
+            id: 'tx_seed_batch_01',
+            eventId: 'evt_selling_01',
+            eventName: 'Community Harvest Grocery & Cash Bonanza',
+            agentId: 'agent_leo',
+            managerId: 'mgr_north',
+            buyerNickname: 'KuyaBen_Batch',
+            buyerPhone: '0917-118-2040',
+            slots: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+            saleMode: 'batch',
+            amountTotal: 18 * 150,
+            createdAt: new Date(now - 12 * hour).toISOString()
+          },
+          {
+            id: 'tx_seed_batch_02',
+            eventId: 'evt_endorsed_02',
+            eventName: 'Barangay Fiesta Mega Tech & Sari-Sari Draw',
+            agentId: 'agent_maya',
+            managerId: 'mgr_north',
+            buyerNickname: 'AteJoy_Group',
+            buyerPhone: '0917-220-8891',
+            slots: Array.from({ length: 25 }, (_, i) => i + 1),
+            saleMode: 'batch',
+            amountTotal: 25 * 200,
+            createdAt: new Date(now - 4 * hour).toISOString()
+          },
+          {
+            id: 'tx_seed_batch_03',
+            eventId: 'evt_drawn_03',
+            eventName: 'Sunday Market Livelihood Starter Bundle',
+            agentId: 'agent_leo',
+            managerId: 'mgr_north',
+            buyerNickname: 'MangToni_Group',
+            buyerPhone: '0917-339-1122',
+            slots: Array.from({ length: 20 }, (_, i) => i + 1),
+            saleMode: 'batch',
+            amountTotal: 20 * 100,
+            createdAt: new Date(now - 18 * hour).toISOString()
+          },
+          {
+            id: 'tx_seed_batch_04',
+            eventId: 'evt_archived_04',
+            eventName: 'Back-to-School Community Study Desk Drive',
+            agentId: 'agent_sam',
+            managerId: 'mgr_south',
+            buyerNickname: 'NanayLuz_Group',
+            buyerPhone: '0918-441-7720',
+            slots: Array.from({ length: 15 }, (_, i) => i + 1),
+            saleMode: 'batch',
+            amountTotal: 15 * 120,
+            createdAt: new Date(now - 52 * hour).toISOString()
+          }
+        ]
+      };
+    }
+
+    /* =====================================================================
+       2. DATABASE STORE & ACCESS CONTROL LAYER
+       ===================================================================== */
+    const Store = {
+      db: null,
+
+      sessions: {
+        agent: null,
+        manager: null,
+        superadmin: false,
+        vaultUnlocked: false
+      },
+
+      uiState: {
+        activeTab: 'public',
+        publicFilter: 'all',
+        selectedAgentEventId: 'evt_selling_01',
+        agentSaleMode: 'individual',
+        selectedSlotsForSale: [],
+        draftBuyerNickname: '',
+        draftBuyerPhone: '',
+        draftBatchInput: '',
+        superadminEventFilter: 'all',
+        isDrawInProgress: false
+      },
+
+      init() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.events) && Array.isArray(parsed.users) && Array.isArray(parsed.proposals)) {
+              this.db = parsed;
+            } else {
+              this.db = buildSeedDatabase();
+              this.save();
+            }
+          } else {
+            this.db = buildSeedDatabase();
+            this.save();
+          }
+        } catch (err) {
+          console.error('Database initialization fallback triggered:', err);
+          this.db = buildSeedDatabase();
+        }
+      },
+
+      save() {
+        this.db.meta.lastUpdated = new Date().toISOString();
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
+        } catch (err) {
+          console.error('Failed to persist state to localStorage:', err);
+        }
+        UI.syncHeaderIndicators();
+      },
+
+      resetToSeed() {
+        this.db = buildSeedDatabase();
+        this.uiState.selectedSlotsForSale = [];
+        this.uiState.draftBuyerNickname = '';
+        this.uiState.draftBuyerPhone = '';
+        this.uiState.draftBatchInput = '';
+        this.save();
+        UI.notify('Database reset to clean initial seed state.', 'success');
+        UI.renderCurrentTab();
+      },
+
+      getPublicSafeEvent(event) {
+        return {
+          id: event.id,
+          name: event.name,
+          bracketName: event.bracketName,
+          totalSlots: event.totalSlots,
+          pricePerSlot: event.pricePerSlot,
+          status: event.status,
+          endorsedAt: event.endorsedAt,
+          drawnAt: event.drawnAt,
+          archivedAt: event.archivedAt,
+          prizes: event.prizes.map(p => ({
+            prizeId: p.prizeId,
+            rankLabel: p.rankLabel,
+            description: p.description,
+            winningSlot: p.winningSlot,
+            releaseStatus: p.releaseStatus,
+            releasedAt: p.releasedAt
+          })),
+          slots: event.slots.map(s => ({
+            slotNumber: s.slotNumber,
+            status: s.status
+          }))
+        };
+      },
+
+      getUserById(userId) {
+        return this.db.users.find(u => u.id === userId) || null;
+      },
+
+      getEventById(eventId) {
+        return this.db.events.find(e => e.id === eventId) || null;
+      },
+
+      getSoldCount(event) {
+        return event.slots.filter(s => s.status === 'sold').length;
+      }
+    };
+
+    /* =====================================================================
+       3. SYNTHESIZED SOUND ENGINE (Web Audio API)
+       ===================================================================== */
+    const SoundFX = {
+      ctx: null,
+      ensureCtx() {
+        if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      tick(freq = 520) {
+        try {
+          this.ensureCtx();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.045);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.05);
+        } catch (_) {}
+      },
+      fanfare() {
+        try {
+          this.ensureCtx();
+          if (!this.ctx) return;
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((n, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const startTime = this.ctx.currentTime + idx * 0.11;
+            osc.frequency.setValueAtTime(n, startTime);
+            gain.gain.setValueAtTime(0.09, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.46);
+          });
+        } catch (_) {}
+      }
+    };
+
+    /* =====================================================================
+       4. GLOBAL UI CONTROLLER & SHARED HELPERS
+       ===================================================================== */
+    const UI = {
+      escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      },
+
+      formatCurrency(amount) {
+        return '₱' + Number(amount || 0).toLocaleString('en-PH', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        });
+      },
+
+      formatDate(isoStr) {
+        if (!isoStr) return '—';
+        const d = new Date(isoStr);
+        return d.toLocaleString('en-PH', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      },
+
+      notify(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const colors = {
+          success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200',
+          warning: 'bg-amber-950/95 border-amber-500/60 text-amber-200',
+          error: 'bg-rose-950/95 border-rose-500/60 text-rose-200',
+          info: 'bg-slate-900/95 border-slate-600 text-slate-200'
+        };
+        const icons = {
+          success: 'fa-circle-check text-emerald-400',
+          warning: 'fa-triangle-exclamation text-amber-400',
+          error: 'fa-circle-xmark text-rose-400',
+          info: 'fa-circle-info text-sky-400'
+        };
+        const toast = document.createElement('div');
+        toast.className = `pointer-events-auto border rounded-xl px-4 py-3 shadow-xl flex items-start gap-3 text-xs sm:text-sm backdrop-blur transition-all duration-300 ${colors[type] || colors.info}`;
+        toast.innerHTML = `
+          <i class="fa-solid ${icons[type] || icons.info} mt-0.5"></i>
+          <div class="flex-1 font-medium">${this.escapeHtml(message)}</div>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 3800);
+      },
+
+      openModal({ title, bodyHtml, footerHtml = '' }) {
+        document.getElementById('app-modal-title').innerHTML = title;
+        document.getElementById('app-modal-body').innerHTML = bodyHtml;
+        document.getElementById('app-modal-footer').innerHTML = footerHtml || `
+          <button onclick="UI.closeModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold">Close</button>
+        `;
+        document.getElementById('app-modal-backdrop').classList.remove('hidden');
+      },
+
+      closeModal() {
+        document.getElementById('app-modal-backdrop').classList.add('hidden');
+      },
+
+      switchTab(tabName) {
+        if (Store.uiState.isDrawInProgress) {
+          this.notify('Navigation is locked while an official Live Draw is in progress.', 'warning');
+          return;
+        }
+        Store.uiState.activeTab = tabName;
+
+        const tabs = ['public', 'agent', 'manager', 'superadmin', 'draw'];
+        tabs.forEach(t => {
+          const section = document.getElementById(`view-${t}`);
+          const btn = document.getElementById(`tab-btn-${t}`);
+          if (t === tabName) {
+            section.classList.remove('hidden');
+            btn.className = 'nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20';
+          } else {
+            section.classList.add('hidden');
+            btn.className = 'nav-tab-btn px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 whitespace-nowrap bg-slate-800/70 hover:bg-slate-800 text-slate-300';
+          }
+        });
+
+        this.renderCurrentTab();
+      },
+
+      renderCurrentTab() {
+        this.syncHeaderIndicators();
+        const tab = Store.uiState.activeTab;
+        if (tab === 'public') PublicView.render();
+        else if (tab === 'agent') AgentView.render();
+        else if (tab === 'manager') ManagerView.render();
+        else if (tab === 'superadmin') SuperadminView.render();
+        else if (tab === 'draw') DrawStudioView.render();
+      },
+
+      syncHeaderIndicators() {
+        const endorsedEvents = Store.db.events.filter(e => e.status === 'endorsed');
+        const pendingProposals = Store.db.proposals.filter(p => p.status === 'pending');
+        const totalReady = endorsedEvents.length + pendingProposals.length;
+
+        const badge = document.getElementById('endorsed-count-badge');
+        if (totalReady > 0) {
+          badge.textContent = totalReady;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+
+        const agentBadge = document.getElementById('agent-nav-badge');
+        const hasPendingReleases = Store.db.events.some(
+          e => e.status === 'drawn' && e.prizes.some(p => p.releaseStatus === 'pending_release')
+        );
+        if (hasPendingReleases) {
+          agentBadge.classList.remove('hidden');
+        } else {
+          agentBadge.classList.add('hidden');
+        }
+
+        const marqueeContainer = document.getElementById('global-marquee-container');
+        const marqueeContent = document.getElementById('global-marquee-content');
+        if (Store.db.marquee && Store.db.marquee.winners && Store.db.marquee.winners.length > 0) {
+          const m = Store.db.marquee;
+          const winnerPills = m.winners
+            .map(w => `Slot #${String(w.slotNumber).padStart(2, '0')} → ${this.escapeHtml(w.rankLabel)} (${this.escapeHtml(w.description)})`)
+            .join('   ★   ');
+          marqueeContent.innerHTML = `
+            <span class="font-bold text-white">CONGRATULATIONS!</span>
+            Official Draw Complete for <span class="text-emerald-300 font-bold">"${this.escapeHtml(m.eventName)}"</span>
+            — Winning Slots: <span class="text-amber-300 font-mono">${winnerPills}</span>
+            — Coordinate with your community agent for prize verification &amp; release!
+          `;
+          marqueeContainer.classList.remove('hidden');
+        } else {
+          marqueeContainer.classList.add('hidden');
+        }
+      },
+
+      JumpToEventFromMarquee() {
+        if (!Store.db.marquee) return;
+        Store.uiState.publicFilter = 'drawn';
+        this.switchTab('public');
+      },
+
+      inspectWinningSlot(eventId, slotNumber) {
+        const rawEvent = Store.getEventById(eventId);
+        if (!rawEvent) return;
+        const safeEvent = Store.getPublicSafeEvent(rawEvent);
+        const winningPrizes = safeEvent.prizes.filter(p => Number(p.winningSlot) === Number(slotNumber));
+
+        if (winningPrizes.length === 0) return;
+
+        const prizeCards = winningPrizes.map(p => {
+          const isReleased = p.releaseStatus === 'released';
+          return `
+            <div class="p-4 rounded-xl bg-slate-950 border ${isReleased ? 'border-emerald-500/40' : 'border-amber-500/40'} space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-400">
+                  <i class="fa-solid fa-trophy mr-1"></i> ${this.escapeHtml(p.rankLabel)}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  isReleased
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                }">
+                  ${isReleased ? 'Released' : 'For Release'}
+                </span>
+              </div>
+              <p class="text-slate-200 font-medium">${this.escapeHtml(p.description)}</p>
+              <div class="text-xs text-slate-400 pt-1 border-t border-slate-800/80 flex justify-between">
+                <span>Fulfillment Status: <strong>${isReleased ? 'Prize Released to Winner' : 'Pending Verification & Release'}</strong></span>
+                ${p.releasedAt ? `<span>Released: ${this.formatDate(p.releasedAt)}</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        this.openModal({
+          title: `<span class="flex items-center gap-2"><span class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono font-extrabold text-sm">Slot #${String(slotNumber).padStart(2, '0')}</span> <span>Winning Slot Details</span></span>`,
+          bodyHtml: `
+            <div class="space-y-3">
+              <div class="text-xs text-slate-400">
+                Raffle Event: <strong class="text-slate-200">${this.escapeHtml(safeEvent.name)}</strong> (${this.escapeHtml(safeEvent.bracketName)})
+              </div>
+              ${prizeCards}
+              <div class="p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-xs text-slate-400">
+                <i class="fa-solid fa-lock text-emerald-400 mr-1"></i>
+                <strong>Privacy Notice:</strong> Winner nicknames and contact numbers are never displayed publicly. Winning slot holders are contacted directly by their community agent.
+              </div>
+            </div>
+          `
+        });
+      },
+
+      statusBadgeHtml(status) {
+        const map = {
+          selling: { label: 'Selling Slots', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', icon: 'fa-cart-shopping' },
+          endorsed: { label: 'Endorsed for Draw', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30', icon: 'fa-clock-rotate-left' },
+          drawn: { label: 'Drawn — Releasing Prizes', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30', icon: 'fa-trophy' },
+          archived: { label: 'Events History (Completed)', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30', icon: 'fa-box-archive' }
+        };
+        const st = map[status] || map.selling;
+        return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${st.cls}">
+          <i class="fa-solid ${st.icon}"></i> ${st.label}
+        </span>`;
+      }
+    };
+
+    /* =====================================================================
+       5. TAB 1: PUBLIC RAFFLE EVENTS RENDERER (STRICT ZERO-PII)
+       ===================================================================== */
+    const PublicView = {
+      setFilter(filter) {
+        Store.uiState.publicFilter = filter;
+        this.render();
+      },
+
+      render() {
+        const container = document.getElementById('view-public');
+        const currentFilter = Store.uiState.publicFilter;
+
+        const allSafeEvents = Store.db.events.map(e => Store.getPublicSafeEvent(e));
+        const filteredEvents = currentFilter === 'all'
+          ? allSafeEvents
+          : allSafeEvents.filter(e => e.status === currentFilter);
+
+        const counts = {
+          all: allSafeEvents.length,
+          selling: allSafeEvents.filter(e => e.status === 'selling').length,
+          endorsed: allSafeEvents.filter(e => e.status === 'endorsed').length,
+          drawn: allSafeEvents.filter(e => e.status === 'drawn').length,
+          archived: allSafeEvents.filter(e => e.status === 'archived').length
+        };
+
+        const eventCardsHtml = filteredEvents.map(ev => this.renderPublicEventCard(ev)).join('');
+
+        container.innerHTML = `
+          <div class="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/60 border border-slate-800 p-5 sm:p-6 shadow-xl">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div class="space-y-1.5">
+                <div class="inline-flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  <i class="fa-solid fa-seedling"></i> Public Transparency Board • No PII Collected Publicly
+                </div>
+                <h2 class="text-xl sm:text-2xl font-extrabold text-white">Community Raffle Events &amp; Official Results</h2>
+                <p class="text-xs sm:text-sm text-slate-300 max-w-2xl">
+                  Browse active community raffles, check open slot numbers, or tap any <span class="text-amber-300 font-semibold">highlighted winning slot</span> on completed draws to inspect the prize won and live fulfillment status (<span class="text-amber-300">For Release</span> or <span class="text-emerald-300">Released</span>).
+                </p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5">
+                ${[
+                  { key: 'all', label: 'All Events' },
+                  { key: 'selling', label: 'Selling Now' },
+                  { key: 'endorsed', label: 'Endorsed for Draw' },
+                  { key: 'drawn', label: 'Completed Draws' },
+                  { key: 'archived', label: 'Events History' }
+                ].map(f => `
+                  <button onclick="PublicView.setFilter('${f.key}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition border ${
+                    currentFilter === f.key
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                      : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700'
+                  }">
+                    ${f.label} <span class="ml-1 font-mono opacity-80">(${counts[f.key]})</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-6">
+            ${filteredEvents.length > 0 ? eventCardsHtml : `
+              <div class="text-center py-12 bg-slate-900/50 border border-slate-800 rounded-2xl text-slate-400">
+                No raffle events match the selected filter.
+              </div>
+            `}
+          </div>
+        `;
+      },
+
+      renderPublicEventCard(ev) {
+        const soldCount = ev.slots.filter(s => s.status === 'sold').length;
+        const pct = Math.round((soldCount / ev.totalSlots) * 100);
+        const isCompletedOrHistory = ev.status === 'drawn' || ev.status === 'archived';
+
+        const winningMap = {};
+        ev.prizes.forEach(p => {
+          if (p.winningSlot) {
+            winningMap[p.winningSlot] = p;
+          }
+        });
+
+        const slotsGridHtml = ev.slots.map(slot => {
+          const winPrize = winningMap[slot.slotNumber];
+          if (isCompletedOrHistory && winPrize) {
+            const isReleased = winPrize.releaseStatus === 'released';
+            return `
+              <button
+                onclick="UI.inspectWinningSlot('${ev.id}', ${slot.slotNumber})"
+                title="Winning Slot #${slot.slotNumber} — Click to view prize & release status"
+                class="relative group h-11 rounded-lg font-mono text-xs font-extrabold transition transform hover:-translate-y-0.5 flex flex-col items-center justify-center border-2 ${
+                  isReleased
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 shadow-lg shadow-emerald-500/10'
+                    : 'bg-amber-500/25 border-amber-400 text-amber-200 shadow-lg shadow-amber-500/15 animate-pulse'
+                }">
+                <span class="flex items-center gap-0.5"><i class="fa-solid fa-crown text-[10px] text-amber-300"></i> #${String(slot.slotNumber).padStart(2, '0')}</span>
+                <span class="text-[9px] uppercase tracking-tighter ${isReleased ? 'text-emerald-300' : 'text-amber-300'}">${isReleased ? 'Released' : 'For Release'}</span>
+              </button>
+            `;
+          }
+
+          if (slot.status === 'sold') {
+            return `
+              <div class="h-11 rounded-lg bg-slate-800/70 border border-slate-700/70 text-slate-500 font-mono text-xs flex flex-col items-center justify-center select-none">
+                <span>#${String(slot.slotNumber).padStart(2, '0')}</span>
+                <span class="text-[9px] uppercase">Taken</span>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="h-11 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 font-mono text-xs font-bold flex flex-col items-center justify-center">
+              <span>#${String(slot.slotNumber).padStart(2, '0')}</span>
+              <span class="text-[9px] uppercase text-emerald-400/80">Open</span>
+            </div>
+          `;
+        }).join('');
+
+        const prizeListHtml = ev.prizes.map(p => {
+          const hasWinner = Boolean(p.winningSlot);
+          const isReleased = p.releaseStatus === 'released';
+          return `
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div>
+                <div class="text-xs font-bold text-amber-400 uppercase tracking-wide">${UI.escapeHtml(p.rankLabel)}</div>
+                <div class="text-xs sm:text-sm text-slate-200">${UI.escapeHtml(p.description)}</div>
+              </div>
+              ${hasWinner ? `
+                <div class="flex items-center gap-2 shrink-0">
+                  <button onclick="UI.inspectWinningSlot('${ev.id}', ${p.winningSlot})" class="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/50 text-amber-200 font-mono text-xs font-bold transition">
+                    <i class="fa-solid fa-trophy mr-1"></i> Winning Slot #${String(p.winningSlot).padStart(2, '0')}
+                  </button>
+                  <span class="px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                    isReleased
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  }">
+                    ${isReleased ? 'Released' : 'For Release'}
+                  </span>
+                </div>
+              ` : `
+                <span class="text-xs font-mono text-slate-400 shrink-0">Draw Pending</span>
+              `}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <article class="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-lg">
+            <div class="p-5 sm:p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  ${UI.statusBadgeHtml(ev.status)}
+                  <span class="text-xs font-medium text-slate-400 px-2.5 py-0.5 rounded-full bg-slate-800">
+                    <i class="fa-solid fa-location-dot text-emerald-400 mr-1"></i> ${UI.escapeHtml(ev.bracketName)}
+                  </span>
+                </div>
+                <h3 class="text-lg sm:text-xl font-bold text-white pt-1">${UI.escapeHtml(ev.name)}</h3>
+              </div>
+
+              <div class="flex items-center gap-4 bg-slate-950/80 border border-slate-800 px-4 py-2.5 rounded-xl shrink-0">
+                <div>
+                  <div class="text-[11px] uppercase text-slate-400">Price / Slot</div>
+                  <div class="text-base font-extrabold text-emerald-400 font-mono">${UI.formatCurrency(ev.pricePerSlot)}</div>
+                </div>
+                <div class="h-8 w-px bg-slate-800"></div>
+                <div>
+                  <div class="text-[11px] uppercase text-slate-400">Slots Filled</div>
+                  <div class="text-base font-extrabold text-white font-mono">${soldCount} / ${ev.totalSlots} <span class="text-xs text-slate-400 font-normal">(${pct}%)</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div class="lg:col-span-5 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <i class="fa-solid fa-gift text-amber-400 mr-1"></i> Official Prize Lineup (${ev.prizes.length})
+                  </h4>
+                  ${isCompletedOrHistory ? `<span class="text-[11px] text-amber-300">Tap a winning slot for details</span>` : ''}
+                </div>
+                <div class="space-y-2.5">
+                  ${prizeListHtml}
+                </div>
+              </div>
+
+              <div class="lg:col-span-7 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <i class="fa-solid fa-table-cells mr-1 text-emerald-400"></i> Interactive Slot Board (1 – ${ev.totalSlots})
+                  </h4>
+                  <div class="flex items-center gap-3 text-[11px] text-slate-400">
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500/40 border border-emerald-400"></span> Open</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-slate-700"></span> Taken</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-400"></span> Winner (Tap to inspect)</span>
+                  </div>
+                </div>
+                <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                  ${slotsGridHtml}
+                </div>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+    };
+
+    /* =====================================================================
+       6. TAB 2: AGENT PORTAL (LOGIN, SLOT SELLING, PRIZE RELEASE, PASSWORD)
+       ===================================================================== */
+    const AgentView = {
+      preserveDraftInputs() {
+        const nickEl = document.getElementById('buyer-nickname-input');
+        const phoneEl = document.getElementById('buyer-phone-input');
+        const batchEl = document.getElementById('agent-batch-slot-input');
+        if (nickEl) Store.uiState.draftBuyerNickname = nickEl.value;
+        if (phoneEl) Store.uiState.draftBuyerPhone = phoneEl.value;
+        if (batchEl) Store.uiState.draftBatchInput = batchEl.value;
+      },
+
+      login() {
+        const u = (document.getElementById('agent-login-user')?.value ?? '').trim();
+        const p = (document.getElementById('agent-login-pass')?.value ?? '').trim();
+
+        if (!u || !p) {
+          UI.notify('Please enter both your agent username and password.', 'warning');
+          return;
+        }
+
+        const agent = Store.db.users.find(
+          usr => usr.role === 'agent' && usr.username.toLowerCase() === u.toLowerCase() && usr.password === p
+        );
+
+        if (!agent) {
+          UI.notify('Invalid agent credentials. Please verify your username and password.', 'error');
+          return;
+        }
+        if (!agent.active) {
+          UI.notify('This agent account has been deactivated by your Manager.', 'warning');
+          return;
+        }
+
+        Store.sessions.agent = agent;
+        const bracketEvents = Store.db.events.filter(e => e.managerId === agent.managerId && e.status === 'selling');
+        if (bracketEvents.length > 0) {
+          Store.uiState.selectedAgentEventId = bracketEvents[0].id;
+        }
+        Store.uiState.selectedSlotsForSale = [];
+        UI.notify(`Logged in as ${agent.displayName}`, 'success');
+        this.render();
+      },
+
+      logout() {
+        Store.sessions.agent = null;
+        Store.uiState.selectedSlotsForSale = [];
+        Store.uiState.draftBuyerNickname = '';
+        Store.uiState.draftBuyerPhone = '';
+        Store.uiState.draftBatchInput = '';
+        UI.notify('Logged out of Agent Portal.', 'info');
+        this.render();
+      },
+
+      selectEventForSelling(eventId) {
+        this.preserveDraftInputs();
+        Store.uiState.selectedAgentEventId = eventId;
+        Store.uiState.selectedSlotsForSale = [];
+        this.render();
+      },
+
+      setSaleMode(mode) {
+        this.preserveDraftInputs();
+        Store.uiState.agentSaleMode = mode;
+        if (mode === 'individual' && Store.uiState.selectedSlotsForSale.length > 1) {
+          Store.uiState.selectedSlotsForSale = [Store.uiState.selectedSlotsForSale[0]];
+        }
+        this.render();
+      },
+
+      toggleSlotSelection(slotNumber) {
+        this.preserveDraftInputs();
+        const event = Store.getEventById(Store.uiState.selectedAgentEventId);
+        if (!event || event.status !== 'selling') return;
+        const slot = event.slots.find(s => s.slotNumber === slotNumber);
+        if (!slot || slot.status !== 'available') return;
+
+        const list = Store.uiState.selectedSlotsForSale;
+        const idx = list.indexOf(slotNumber);
+
+        if (Store.uiState.agentSaleMode === 'individual') {
+          Store.uiState.selectedSlotsForSale = idx >= 0 ? [] : [slotNumber];
+        } else {
+          if (idx >= 0) list.splice(idx, 1);
+          else list.push(slotNumber);
+          Store.uiState.selectedSlotsForSale.sort((a, b) => a - b);
+        }
+        this.render();
+      },
+
+      selectAllAvailableSlots() {
+        this.preserveDraftInputs();
+        const event = Store.getEventById(Store.uiState.selectedAgentEventId);
+        if (!event || event.status !== 'selling') return;
+        Store.uiState.agentSaleMode = 'batch';
+        Store.uiState.selectedSlotsForSale = event.slots
+          .filter(s => s.status === 'available')
+          .map(s => s.slotNumber);
+        this.render();
+      },
+
+      applyBatchRangeInput() {
+        this.preserveDraftInputs();
+        const rawInput = Store.uiState.draftBatchInput.trim();
+        const event = Store.getEventById(Store.uiState.selectedAgentEventId);
+        if (!event || !rawInput) return;
+
+        const chosen = new Set();
+        rawInput.split(',').forEach(part => {
+          const trimmed = part.trim();
+          if (trimmed.includes('-')) {
+            const [start, end] = trimmed.split('-').map(n => parseInt(n.trim(), 10));
+            if (!isNaN(start) && !isNaN(end) && start <= end) {
+              for (let i = start; i <= end; i++) chosen.add(i);
+            }
+          } else {
+            const num = parseInt(trimmed, 10);
+            if (!isNaN(num)) chosen.add(num);
+          }
+        });
+
+        const validAvailable = event.slots
+          .filter(s => s.status === 'available' && chosen.has(s.slotNumber))
+          .map(s => s.slotNumber);
+
+        if (validAvailable.length === 0) {
+          UI.notify('None of the specified slot numbers are currently open.', 'warning');
+          return;
+        }
+        Store.uiState.selectedSlotsForSale = validAvailable;
+        UI.notify(`Selected ${validAvailable.length} available slot(s): #${validAvailable.join(', #')}`, 'info');
+        this.render();
+      },
+
+      submitSlotSale() {
+        const agent = Store.sessions.agent;
+        if (!agent) return;
+
+        const event = Store.getEventById(Store.uiState.selectedAgentEventId);
+        if (!event || event.status !== 'selling') {
+          UI.notify('Selected event is no longer open for slot sales.', 'error');
+          return;
+        }
+
+        const slotsToBuy = Store.uiState.selectedSlotsForSale;
+        if (slotsToBuy.length === 0) {
+          UI.notify('Please select at least one open slot from the grid.', 'warning');
+          return;
+        }
+
+        const nickname = (document.getElementById('buyer-nickname-input')?.value || '').trim();
+        const phone = (document.getElementById('buyer-phone-input')?.value || '').trim();
+
+        if (!nickname) {
+          UI.notify('Please enter the buyer nickname (avoid full legal names for PII protection).', 'warning');
+          return;
+        }
+        if (!phone || phone.length < 7) {
+          UI.notify('Please enter a valid contact phone number for prize notification.', 'warning');
+          return;
+        }
+
+        for (const num of slotsToBuy) {
+          const sl = event.slots.find(s => s.slotNumber === num);
+          if (!sl || sl.status !== 'available') {
+            UI.notify(`Slot #${num} is already sold. Please refresh your selection.`, 'error');
+            return;
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        const txId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+
+        slotsToBuy.forEach(num => {
+          const sl = event.slots.find(s => s.slotNumber === num);
+          sl.status = 'sold';
+          sl.buyerNickname = nickname;
+          sl.buyerPhone = phone;
+          sl.agentId = agent.id;
+          sl.soldAt = nowIso;
+          sl.txId = txId;
+        });
+
+        const totalCost = slotsToBuy.length * event.pricePerSlot;
+        Store.db.transactions.unshift({
+          id: txId,
+          eventId: event.id,
+          eventName: event.name,
+          agentId: agent.id,
+          managerId: agent.managerId,
+          buyerNickname: nickname,
+          buyerPhone: phone,
+          slots: [...slotsToBuy],
+          saleMode: slotsToBuy.length > 1 ? 'batch' : 'individual',
+          amountTotal: totalCost,
+          createdAt: nowIso
+        });
+
+        Store.uiState.selectedSlotsForSale = [];
+        Store.uiState.draftBuyerNickname = '';
+        Store.uiState.draftBuyerPhone = '';
+        Store.uiState.draftBatchInput = '';
+        Store.save();
+
+        const soldCount = Store.getSoldCount(event);
+        if (soldCount === event.totalSlots) {
+          UI.notify(`All ${event.totalSlots} slots are now SOLD OUT! Your Manager can now endorse "${event.name}" for Official Drawing.`, 'success');
+        } else {
+          UI.notify(`Recorded ${slotsToBuy.length} slot(s) for "${nickname}" (${UI.formatCurrency(totalCost)}).`, 'success');
+        }
+        this.render();
+      },
+
+      updatePrizeReleaseStatus(eventId, prizeId, newStatus) {
+        const agent = Store.sessions.agent;
+        if (!agent) return;
+
+        const event = Store.getEventById(eventId);
+        if (!event || (event.status !== 'drawn' && event.status !== 'archived')) return;
+
+        const prize = event.prizes.find(p => p.prizeId === prizeId);
+        if (!prize) return;
+
+        prize.releaseStatus = newStatus;
+        prize.releasedByAgentId = newStatus === 'released' ? agent.id : null;
+        prize.releasedAt = newStatus === 'released' ? new Date().toISOString() : null;
+
+        const allReleased = event.prizes.every(p => p.releaseStatus === 'released');
+        if (allReleased && event.status === 'drawn') {
+          event.status = 'archived';
+          event.archivedAt = new Date().toISOString();
+          Store.save();
+          UI.notify(`All prizes for "${event.name}" are now Released! Event has been automatically moved to Events History.`, 'success');
+        } else {
+          if (!allReleased && event.status === 'archived') {
+            event.status = 'drawn';
+            event.archivedAt = null;
+          }
+          Store.save();
+          UI.notify(`Updated "${prize.rankLabel}" status to ${newStatus === 'released' ? 'Released' : 'For Release'}.`, 'info');
+        }
+
+        this.render();
+      },
+
+      changePassword() {
+        const agent = Store.sessions.agent;
+        if (!agent) return;
+        const currentPass = (document.getElementById('agent-curr-pass')?.value || '').trim();
+        const newPass = (document.getElementById('agent-new-pass')?.value || '').trim();
+
+        const dbUser = Store.getUserById(agent.id);
+        if (!dbUser || dbUser.password !== currentPass) {
+          UI.notify('Current password does not match.', 'error');
+          return;
+        }
+        if (newPass.length < 6) {
+          UI.notify('New password must be at least 6 characters.', 'warning');
+          return;
+        }
+
+        dbUser.password = newPass;
+        Store.sessions.agent = dbUser;
+        Store.save();
+        UI.notify('Your agent password has been updated.', 'success');
+        this.render();
+      },
+
+      render() {
+        const container = document.getElementById('view-agent');
+        const sessionAgent = Store.sessions.agent ? Store.getUserById(Store.sessions.agent.id) : null;
+
+        if (!sessionAgent) {
+          container.innerHTML = `
+            <div class="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 my-6">
+              <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-user-tag"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">Agent Portal Login</h2>
+                <p class="text-xs text-slate-400">Sign in with your assigned Agent credentials to sell slots and manage prize releases in your bracket.</p>
+              </div>
+
+              <form onsubmit="event.preventDefault(); AgentView.login();" class="space-y-4" autocomplete="off">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Agent Username</label>
+                  <input id="agent-login-user" type="text" placeholder="Enter your username" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Password</label>
+                  <input id="agent-login-pass" type="password" placeholder="Enter your password" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition shadow-lg shadow-emerald-500/20">
+                  Sign In to Agent Dashboard
+                </button>
+              </form>
+
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                <i class="fa-solid fa-key text-amber-400 mr-1"></i>
+                <strong>Forgot password?</strong> Please contact your assigned Bracket Manager for a password reset.
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        const manager = Store.getUserById(sessionAgent.managerId);
+        const bracketEvents = Store.db.events.filter(e => e.managerId === sessionAgent.managerId);
+        const sellingEvents = bracketEvents.filter(e => e.status === 'selling');
+        const drawnAndArchivedEvents = bracketEvents.filter(e => e.status === 'drawn' || e.status === 'archived');
+
+        let activeSellEvent = sellingEvents.find(e => e.id === Store.uiState.selectedAgentEventId) || sellingEvents[0] || null;
+        if (activeSellEvent) Store.uiState.selectedAgentEventId = activeSellEvent.id;
+
+        const pendingWinningItems = [];
+        bracketEvents.filter(e => e.status === 'drawn').forEach(ev => {
+          ev.prizes.forEach(prz => {
+            if (prz.releaseStatus === 'pending_release' && prz.winningSlot) {
+              const slotObj = ev.slots.find(s => s.slotNumber === prz.winningSlot);
+              pendingWinningItems.push({ event: ev, prize: prz, slot: slotObj });
+            }
+          });
+        });
+
+        let sellingWorkspaceHtml = '';
+        if (activeSellEvent) {
+          const soldCount = Store.getSoldCount(activeSellEvent);
+          const selectedSlots = Store.uiState.selectedSlotsForSale;
+          const totalAmount = selectedSlots.length * activeSellEvent.pricePerSlot;
+
+          sellingWorkspaceHtml = `
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div class="lg:col-span-7 bg-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span class="text-xs font-mono text-emerald-400 uppercase">Active Bracket Raffle</span>
+                    <h4 class="text-base font-bold text-white">${UI.escapeHtml(activeSellEvent.name)}</h4>
+                  </div>
+                  <div class="text-right font-mono">
+                    <div class="text-xs text-slate-400">Price: <strong class="text-emerald-400">${UI.formatCurrency(activeSellEvent.pricePerSlot)}</strong> / slot</div>
+                    <div class="text-xs text-slate-400">Available: <strong class="text-white">${activeSellEvent.totalSlots - soldCount}</strong> of ${activeSellEvent.totalSlots}</div>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <div class="flex items-center gap-1.5">
+                    <button onclick="AgentView.setSaleMode('individual')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      Store.uiState.agentSaleMode === 'individual' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'
+                    }">
+                      Individual Slot Mode
+                    </button>
+                    <button onclick="AgentView.setSaleMode('batch')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      Store.uiState.agentSaleMode === 'batch' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'
+                    }">
+                      Batch / Multi-Slot Mode
+                    </button>
+                  </div>
+                  <button onclick="AgentView.selectAllAvailableSlots()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold transition">
+                    Select All Open (${activeSellEvent.totalSlots - soldCount})
+                  </button>
+                </div>
+
+                ${Store.uiState.agentSaleMode === 'batch' ? `
+                  <div class="flex items-center gap-2">
+                    <input id="agent-batch-slot-input" type="text" value="${UI.escapeHtml(Store.uiState.draftBatchInput)}" placeholder="Type batch slots e.g. 19, 20 or 15-20" class="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono" />
+                    <button onclick="AgentView.applyBatchRangeInput()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-300 border border-slate-700">
+                      Apply Batch Numbers
+                    </button>
+                  </div>
+                ` : ''}
+
+                <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                  ${activeSellEvent.slots.map(s => {
+                    const isSelected = selectedSlots.includes(s.slotNumber);
+                    if (s.status === 'sold') {
+                      return `
+                        <div title="Sold to ${UI.escapeHtml(s.buyerNickname)}" class="h-11 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 font-mono text-xs flex flex-col items-center justify-center">
+                          <span>#${String(s.slotNumber).padStart(2, '0')}</span>
+                          <span class="text-[9px] truncate max-w-full px-1">${UI.escapeHtml(s.buyerNickname)}</span>
+                        </div>
+                      `;
+                    }
+                    return `
+                      <button
+                        type="button"
+                        onclick="AgentView.toggleSlotSelection(${s.slotNumber})"
+                        class="h-11 rounded-lg font-mono text-xs font-bold transition flex flex-col items-center justify-center border ${
+                          isSelected
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-400/20 scale-105'
+                            : 'bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border-emerald-500/30'
+                        }">
+                        <span>#${String(s.slotNumber).padStart(2, '0')}</span>
+                        <span class="text-[9px] uppercase">${isSelected ? 'Selected' : 'Open'}</span>
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+              <div class="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4">
+                <div class="space-y-4">
+                  <h4 class="text-sm font-bold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                    <i class="fa-solid fa-cash-register text-emerald-400 mr-1"></i> Buyer Entry (Individual or Multi-Slot)
+                  </h4>
+
+                  <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                    <div class="text-xs text-slate-400">Selected Slot(s) (${selectedSlots.length}):</div>
+                    <div class="font-mono text-sm font-bold text-amber-300 break-words">
+                      ${selectedSlots.length > 0 ? selectedSlots.map(n => '#' + String(n).padStart(2, '0')).join(', ') : 'None selected — click open slots on grid'}
+                    </div>
+                    <div class="text-xs text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+                      <span>Total Amount Due:</span>
+                      <strong class="text-emerald-400 font-mono text-sm">${UI.formatCurrency(totalAmount)}</strong>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">
+                      Buyer Nickname / Alias <span class="text-emerald-400">(Preferred over legal name to avoid PII)</span>
+                    </label>
+                    <input id="buyer-nickname-input" type="text" value="${UI.escapeHtml(Store.uiState.draftBuyerNickname)}" placeholder="e.g. KuyaJun_B12" class="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">
+                      Buyer Contact Phone Number <span class="text-slate-400">(For prize claim notification)</span>
+                    </label>
+                    <input id="buyer-phone-input" type="text" value="${UI.escapeHtml(Store.uiState.draftBuyerPhone)}" placeholder="e.g. 0917-555-0199" class="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-emerald-500" />
+                  </div>
+                </div>
+
+                <button onclick="AgentView.submitSlotSale()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition shadow-lg shadow-emerald-500/20">
+                  <i class="fa-solid fa-check-double mr-1"></i> Record Slot Sale (${UI.formatCurrency(totalAmount)})
+                </button>
+              </div>
+            </div>
+          `;
+        } else {
+          sellingWorkspaceHtml = `
+            <div class="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center text-slate-400 text-sm">
+              All raffle events in your Manager's bracket are currently 100% sold out or completed.
+            </div>
+          `;
+        }
+
+        container.innerHTML = `
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-user-check"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-lg font-bold text-white">${UI.escapeHtml(sessionAgent.displayName)}</h2>
+                  <span class="px-2 py-0.5 rounded text-xs font-mono bg-slate-800 text-emerald-400">@${UI.escapeHtml(sessionAgent.username)}</span>
+                </div>
+                <p class="text-xs text-slate-400">
+                  Assigned Bracket: <strong class="text-slate-200">${UI.escapeHtml(sessionAgent.bracketName)}</strong> •
+                  Reporting Manager: <strong class="text-slate-200">${manager ? UI.escapeHtml(manager.displayName) : 'Unassigned'}</strong>
+                </p>
+              </div>
+            </div>
+            <button onclick="AgentView.logout()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
+              <i class="fa-solid fa-right-from-bracket mr-1"></i> Sign Out
+            </button>
+          </div>
+
+          ${pendingWinningItems.length > 0 ? `
+            <div class="rounded-2xl bg-amber-500/15 border-2 border-amber-400/60 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                  <i class="fa-solid fa-bell animate-bounce"></i> Action Required: Winning Slot Prize Release Pending (${pendingWinningItems.length})
+                </div>
+                <p class="text-xs sm:text-sm text-slate-200">
+                  You have winning slots in your bracket awaiting prize hand-off. Contact the buyer below and update the status to <strong>Released</strong> once fulfilled.
+                </p>
+              </div>
+              <a href="#agent-fulfillment-section" class="shrink-0 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs transition text-center">
+                Update Prize Status Below
+              </a>
+            </div>
+          ` : ''}
+
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h3 class="text-base sm:text-lg font-bold text-white">1. Take Bets / Sell Raffle Slots</h3>
+                <p class="text-xs text-slate-400">Select an active selling event in your bracket to record individual or batch slot entries.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                ${sellingEvents.map(ev => {
+                  const sc = Store.getSoldCount(ev);
+                  return `
+                    <button onclick="AgentView.selectEventForSelling('${ev.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                      activeSellEvent && activeSellEvent.id === ev.id
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }">
+                      ${UI.escapeHtml(ev.name)} (${sc}/${ev.totalSlots})
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            ${sellingWorkspaceHtml}
+          </div>
+
+          <div id="agent-fulfillment-section" class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white">2. Drawn &amp; Archived Events — Winner Contact &amp; Prize Fulfillment</h3>
+              <p class="text-xs text-slate-400">
+                Contact winners using their registered phone number. When all prizes in a Drawn event are marked <strong>Released</strong>, the event automatically archives to Events History.
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              ${drawnAndArchivedEvents.map(ev => `
+                <div class="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      ${UI.statusBadgeHtml(ev.status)}
+                      <h4 class="font-bold text-white text-sm sm:text-base">${UI.escapeHtml(ev.name)}</h4>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono">Drawn: ${UI.formatDate(ev.drawnAt)}</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    ${ev.prizes.map(prz => {
+                      const winSlotObj = ev.slots.find(s => s.slotNumber === prz.winningSlot);
+                      const isReleased = prz.releaseStatus === 'released';
+                      return `
+                        <div class="p-3.5 rounded-xl bg-slate-900 border ${isReleased ? 'border-emerald-500/40' : 'border-amber-400/60'} space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-mono font-extrabold text-xs">
+                              Winning Slot #${String(prz.winningSlot).padStart(2, '0')}
+                            </span>
+                            <span class="text-xs font-semibold ${isReleased ? 'text-emerald-400' : 'text-amber-300'}">
+                              ${isReleased ? '✓ Prize Released' : '⏳ Pending Release'}
+                            </span>
+                          </div>
+                          <div class="text-xs font-bold text-white">${UI.escapeHtml(prz.rankLabel)}</div>
+                          <div class="text-xs text-slate-300">${UI.escapeHtml(prz.description)}</div>
+
+                          <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-0.5">
+                            <div>Winner Nickname: <strong class="text-emerald-300 font-mono">${winSlotObj ? UI.escapeHtml(winSlotObj.buyerNickname) : 'N/A'}</strong></div>
+                            <div>Contact Phone: <strong class="text-amber-300 font-mono">${winSlotObj ? UI.escapeHtml(winSlotObj.buyerPhone) : 'N/A'}</strong></div>
+                          </div>
+
+                          <div class="flex items-center justify-between pt-1">
+                            <span class="text-[11px] text-slate-400">Update Release Status:</span>
+                            <div class="flex items-center gap-1.5">
+                              <button
+                                onclick="AgentView.updatePrizeReleaseStatus('${ev.id}', '${prz.prizeId}', 'pending_release')"
+                                class="px-2.5 py-1 rounded text-xs font-semibold transition ${
+                                  !isReleased ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'
+                                }">
+                                For Release
+                              </button>
+                              <button
+                                onclick="AgentView.updatePrizeReleaseStatus('${ev.id}', '${prz.prizeId}', 'released')"
+                                class="px-2.5 py-1 rounded text-xs font-semibold transition ${
+                                  isReleased ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'
+                                }">
+                                Released
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6">
+            <div class="max-w-xl space-y-3">
+              <h3 class="text-base font-bold text-white">3. Change Agent Password</h3>
+              <p class="text-xs text-slate-400">
+                Forgot your current password? Please contact your assigned Manager (<strong>${manager ? UI.escapeHtml(manager.displayName) : 'Manager'}</strong>) for an immediate credential reset.
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <input id="agent-curr-pass" type="password" placeholder="Current Password" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+                <input id="agent-new-pass" type="password" placeholder="New Password (min 6 chars)" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+                <button onclick="AgentView.changePassword()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-xs font-bold text-emerald-400 border border-emerald-500/40 transition">
+                  Update Password
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    /* =====================================================================
+       7. TAB 3: MANAGER PORTAL (AGENT CRUD, ANALYTICS, ENDORSE FOR DRAW)
+       ===================================================================== */
+    const ManagerView = {
+      login() {
+        const u = (document.getElementById('mgr-login-user')?.value ?? '').trim();
+        const p = (document.getElementById('mgr-login-pass')?.value ?? '').trim();
+
+        if (!u || !p) {
+          UI.notify('Please enter both your Manager username and password.', 'warning');
+          return;
+        }
+
+        const mgr = Store.db.users.find(
+          usr => usr.role === 'manager' && usr.username.toLowerCase() === u.toLowerCase() && usr.password === p
+        );
+
+        if (!mgr) {
+          UI.notify('Invalid Manager credentials.', 'error');
+          return;
+        }
+        Store.sessions.manager = mgr;
+        UI.notify(`Welcome, ${mgr.displayName}`, 'success');
+        this.render();
+      },
+
+      logout() {
+        Store.sessions.manager = null;
+        UI.notify('Logged out of Manager Portal.', 'info');
+        this.render();
+      },
+
+      createAgent() {
+        const mgr = Store.sessions.manager;
+        if (!mgr) return;
+
+        const username = (document.getElementById('new-agent-user')?.value || '').trim();
+        const displayName = (document.getElementById('new-agent-name')?.value || '').trim();
+        const password = (document.getElementById('new-agent-pass')?.value || '').trim();
+
+        if (!username || !displayName || password.length < 6) {
+          UI.notify('Please provide username, display name, and a password (min 6 chars).', 'warning');
+          return;
+        }
+        if (Store.db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+          UI.notify('Username already exists across the platform.', 'error');
+          return;
+        }
+
+        Store.db.users.push({
+          id: 'agent_' + Date.now(),
+          username,
+          password,
+          role: 'agent',
+          displayName,
+          bracketName: mgr.bracketName,
+          managerId: mgr.id,
+          active: true,
+          createdAt: new Date().toISOString()
+        });
+
+        Store.save();
+        UI.notify(`Agent account "@${username}" created under ${mgr.bracketName}.`, 'success');
+        this.render();
+      },
+
+      openResetAgentModal(agentId) {
+        const agent = Store.getUserById(agentId);
+        if (!agent) return;
+        UI.openModal({
+          title: `Manage Agent: ${UI.escapeHtml(agent.displayName)}`,
+          bodyHtml: `
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Display Name</label>
+                <input id="modal-agent-name" type="text" value="${UI.escapeHtml(agent.displayName)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Reset Password</label>
+                <input id="modal-agent-pass" type="text" value="${UI.escapeHtml(agent.password)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white font-mono" />
+              </div>
+            </div>
+          `,
+          footerHtml: `
+            <button onclick="UI.closeModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs">Cancel</button>
+            <button onclick="ManagerView.saveAgentEdits('${agent.id}')" class="px-4 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs">Save Changes</button>
+          `
+        });
+      },
+
+      saveAgentEdits(agentId) {
+        const agent = Store.getUserById(agentId);
+        if (!agent) return;
+        const newName = (document.getElementById('modal-agent-name')?.value || '').trim();
+        const newPass = (document.getElementById('modal-agent-pass')?.value || '').trim();
+        if (!newName || newPass.length < 4) {
+          UI.notify('Valid display name and password required.', 'warning');
+          return;
+        }
+        agent.displayName = newName;
+        agent.password = newPass;
+        Store.save();
+        UI.closeModal();
+        UI.notify(`Updated credentials for @${agent.username}.`, 'success');
+        this.render();
+      },
+
+      deleteAgent(agentId) {
+        const agent = Store.getUserById(agentId);
+        if (!agent) return;
+        Store.db.users = Store.db.users.filter(u => u.id !== agentId);
+        Store.save();
+        UI.notify(`Deleted agent @${agent.username}.`, 'info');
+        this.render();
+      },
+
+      endorseEventForDraw(eventId) {
+        const event = Store.getEventById(eventId);
+        if (!event) return;
+        const soldCount = Store.getSoldCount(event);
+        if (soldCount < event.totalSlots) {
+          UI.notify(`Cannot endorse yet: ${event.totalSlots - soldCount} slot(s) are still unsold.`, 'warning');
+          return;
+        }
+
+        event.paymentVerified = true;
+        event.status = 'endorsed';
+        event.endorsedAt = new Date().toISOString();
+        Store.save();
+        UI.notify(`"${event.name}" has been endorsed to Superadmin for Official Live Drawing!`, 'success');
+        this.render();
+      },
+
+      submitEventProposal() {
+        const mgr = Store.sessions.manager;
+        if (!mgr) return;
+        const name = (document.getElementById('prop-event-name')?.value || '').trim();
+        const slots = parseInt(document.getElementById('prop-event-slots')?.value || '20', 10);
+        const price = parseFloat(document.getElementById('prop-event-price')?.value || '100');
+        const prizes = (document.getElementById('prop-event-prizes')?.value || '').trim();
+
+        if (!name || !prizes || isNaN(slots) || slots < 5) {
+          UI.notify('Please complete all event endorsement proposal fields.', 'warning');
+          return;
+        }
+
+        Store.db.proposals.unshift({
+          id: 'prop_' + Date.now(),
+          managerId: mgr.id,
+          type: 'create',
+          targetEventId: null,
+          proposedName: name,
+          proposedSlots: slots,
+          proposedPrice: price,
+          proposedPrizes: prizes,
+          notes: `Endorsed by ${mgr.displayName}`,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        });
+
+        Store.save();
+        UI.notify('Raffle event endorsed to Superadmin for approval & launch.', 'success');
+        this.render();
+      },
+
+      render() {
+        const container = document.getElementById('view-manager');
+        const sessionMgr = Store.sessions.manager ? Store.getUserById(Store.sessions.manager.id) : null;
+
+        if (!sessionMgr) {
+          container.innerHTML = `
+            <div class="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 my-6">
+              <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 mx-auto flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-briefcase"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">Manager Portal Login</h2>
+                <p class="text-xs text-slate-400">Sign in with your Manager credentials to manage bracket agents, review analytics, and endorse raffles for drawing.</p>
+              </div>
+
+              <form onsubmit="event.preventDefault(); ManagerView.login();" class="space-y-4" autocomplete="off">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Manager Username</label>
+                  <input id="mgr-login-user" type="text" placeholder="Enter your username" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-sky-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Password</label>
+                  <input id="mgr-login-pass" type="password" placeholder="Enter your password" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-sky-500" />
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm transition">
+                  Sign In to Manager Portal
+                </button>
+              </form>
+            </div>
+          `;
+          return;
+        }
+
+        const bracketAgents = Store.db.users.filter(u => u.role === 'agent' && u.managerId === sessionMgr.id);
+        const bracketEvents = Store.db.events.filter(e => e.managerId === sessionMgr.id);
+
+        let totalBracketRevenue = 0;
+        let totalBracketSlotsSold = 0;
+        bracketEvents.forEach(ev => {
+          const sc = Store.getSoldCount(ev);
+          totalBracketSlotsSold += sc;
+          totalBracketRevenue += sc * ev.pricePerSlot;
+        });
+
+        container.innerHTML = `
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">Bracket Manager</span>
+                <h2 class="text-lg font-bold text-white">${UI.escapeHtml(sessionMgr.displayName)}</h2>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">Active Bracket: <strong class="text-emerald-400">${UI.escapeHtml(sessionMgr.bracketName)}</strong></p>
+            </div>
+            <button onclick="ManagerView.logout()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200">
+              <i class="fa-solid fa-right-from-bracket mr-1"></i> Sign Out
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Bracket Gross Revenue</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono mt-1">${UI.formatCurrency(totalBracketRevenue)}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Total Slots Sold</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-white font-mono mt-1">${totalBracketSlotsSold}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Active Agents in Bracket</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-sky-400 font-mono mt-1">${bracketAgents.length}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Bracket Raffle Events</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-amber-400 font-mono mt-1">${bracketEvents.length}</div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white">1. Bracket Raffle Events &amp; Draw Endorsement</h3>
+              <p class="text-xs text-slate-400">Verify slot completion and payment collection. Once 100% of slots are sold, endorse the event to Superadmin for official drawing.</p>
+            </div>
+
+            <div class="space-y-3">
+              ${bracketEvents.map(ev => {
+                const sc = Store.getSoldCount(ev);
+                const isFull = sc === ev.totalSlots;
+                const revenue = sc * ev.pricePerSlot;
+                const canEndorse = ev.status === 'selling' && isFull;
+
+                return `
+                  <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div class="space-y-1">
+                      <div class="flex items-center gap-2">
+                        ${UI.statusBadgeHtml(ev.status)}
+                        <span class="font-bold text-white text-sm sm:text-base">${UI.escapeHtml(ev.name)}</span>
+                      </div>
+                      <div class="text-xs text-slate-400 font-mono">
+                        Slots Sold: <strong class="text-white">${sc}/${ev.totalSlots}</strong> •
+                        Price: <strong class="text-emerald-400">${UI.formatCurrency(ev.pricePerSlot)}</strong> •
+                        Collected: <strong class="text-emerald-400">${UI.formatCurrency(revenue)}</strong>
+                      </div>
+                      ${ev.status === 'drawn' || ev.status === 'archived' ? `
+                        <div class="flex flex-wrap gap-2 pt-1">
+                          ${ev.prizes.map(p => `
+                            <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-xs font-mono">
+                              <strong class="text-amber-300">Slot #${String(p.winningSlot).padStart(2, '0')}</strong>: ${UI.escapeHtml(p.rankLabel)}
+                              (${p.releaseStatus === 'released' ? '<span class="text-emerald-400">Released</span>' : '<span class="text-amber-400">For Release</span>'})
+                            </span>
+                          `).join('')}
+                        </div>
+                      ` : ''}
+                    </div>
+
+                    <div class="shrink-0 flex items-center gap-2">
+                      ${canEndorse ? `
+                        <button onclick="ManagerView.endorseEventForDraw('${ev.id}')" class="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs transition shadow-lg shadow-amber-400/20">
+                          <i class="fa-solid fa-check-circle mr-1"></i> Verify Payment &amp; Endorse for Draw
+                        </button>
+                      ` : ev.status === 'selling' ? `
+                        <span class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 font-mono">
+                          Waiting for ${ev.totalSlots - sc} more slot(s)
+                        </span>
+                      ` : ev.status === 'endorsed' ? `
+                        <span class="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300 font-semibold">
+                          Endorsed — Queued for Superadmin Draw
+                        </span>
+                      ` : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
+              <h3 class="text-base font-bold text-white">2. Bracket Agent Performance &amp; Account Management</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 uppercase">
+                      <th class="py-2.5 pr-3">Agent</th>
+                      <th class="py-2.5 px-3">Slots Sold</th>
+                      <th class="py-2.5 px-3">Sales Revenue</th>
+                      <th class="py-2.5 px-3">Winning Slots</th>
+                      <th class="py-2.5 pl-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/70">
+                    ${bracketAgents.map(ag => {
+                      let agSlots = 0;
+                      let agRev = 0;
+                      let agWins = 0;
+                      bracketEvents.forEach(ev => {
+                        ev.slots.forEach(s => {
+                          if (s.agentId === ag.id && s.status === 'sold') {
+                            agSlots++;
+                            agRev += ev.pricePerSlot;
+                          }
+                        });
+                        ev.prizes.forEach(p => {
+                          if (p.winningSlot) {
+                            const ws = ev.slots.find(s => s.slotNumber === p.winningSlot);
+                            if (ws && ws.agentId === ag.id) agWins++;
+                          }
+                        });
+                      });
+
+                      return `
+                        <tr>
+                          <td class="py-3 pr-3">
+                            <div class="font-bold text-white">${UI.escapeHtml(ag.displayName)}</div>
+                            <div class="font-mono text-slate-400">@${UI.escapeHtml(ag.username)}</div>
+                          </td>
+                          <td class="py-3 px-3 font-mono font-bold text-white">${agSlots}</td>
+                          <td class="py-3 px-3 font-mono font-bold text-emerald-400">${UI.formatCurrency(agRev)}</td>
+                          <td class="py-3 px-3 font-mono text-amber-300">${agWins}</td>
+                          <td class="py-3 pl-3 text-right space-x-1">
+                            <button onclick="ManagerView.openResetAgentModal('${ag.id}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold">
+                              Edit / Reset Pass
+                            </button>
+                            <button onclick="ManagerView.deleteAgent('${ag.id}')" class="px-2.5 py-1 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300">
+                              <i class="fa-solid fa-trash"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="lg:col-span-4 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-3">
+              <h3 class="text-base font-bold text-white">Create New Bracket Agent</h3>
+              <p class="text-xs text-slate-400">New agents automatically report to <strong>${UI.escapeHtml(sessionMgr.bracketName)}</strong>.</p>
+              <input id="new-agent-user" type="text" placeholder="Agent Username (e.g. agent_carlo)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <input id="new-agent-name" type="text" placeholder="Display Name (e.g. Agent Carlo)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              <input id="new-agent-pass" type="text" placeholder="Initial Password (min 6 chars)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <button onclick="ManagerView.createAgent()" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition">
+                <i class="fa-solid fa-user-plus mr-1"></i> Create Agent Account
+              </button>
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-3">
+            <h3 class="text-base font-bold text-white">3. Endorse New Raffle Event to Superadmin</h3>
+            <p class="text-xs text-slate-400">Submit a community raffle endorsement for your bracket. Superadmin can approve and launch the draw directly.</p>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <input id="prop-event-name" type="text" placeholder="Proposed Event Name" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              <input id="prop-event-slots" type="number" min="5" max="500" value="25" placeholder="Total Slots (e.g. 25)" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <input id="prop-event-price" type="number" min="1" value="150" placeholder="Price per Slot (₱)" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <input id="prop-event-prizes" type="text" placeholder="Prize Details (e.g. 1st Prize: 25kg Rice | 2nd Prize: ₱500)" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+            </div>
+            <button onclick="ManagerView.submitEventProposal()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+              Submit Event Endorsement to Superadmin
+            </button>
+          </div>
+        `;
+      }
+    };
+
+    /* =====================================================================
+       8. TAB 4: SUPERADMIN PORTAL (HIERARCHY TOP, DISCRETE OVERRIDE, DB VAULT)
+       ===================================================================== */
+    const SuperadminView = {
+      draftEventForm: {
+        name: '',
+        managerId: '',
+        totalSlots: 20,
+        pricePerSlot: 150
+      },
+      draftPrizes: [
+        { rankLabel: '1st Prize — Grand Showcase', description: '', preferredSlot: '' },
+        { rankLabel: '2nd Prize — Runner Up', description: '', preferredSlot: '' }
+      ],
+
+      login() {
+        const u = (document.getElementById('sa-login-user')?.value ?? '').trim();
+        const p = (document.getElementById('sa-login-pass')?.value ?? '').trim();
+
+        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+          Store.sessions.superadmin = true;
+          UI.notify('Superadmin session authenticated.', 'success');
+          this.render();
+        } else {
+          UI.notify('Access Denied: Invalid Superadmin credentials.', 'error');
+        }
+      },
+
+      logout() {
+        Store.sessions.superadmin = false;
+        Store.sessions.vaultUnlocked = false;
+        UI.notify('Superadmin logged out.', 'info');
+        this.render();
+      },
+
+      createManager() {
+        const username = (document.getElementById('sa-mgr-user')?.value || '').trim();
+        const displayName = (document.getElementById('sa-mgr-name')?.value || '').trim();
+        const bracketName = (document.getElementById('sa-mgr-bracket')?.value || '').trim();
+        const password = (document.getElementById('sa-mgr-pass')?.value || '').trim();
+
+        if (!username || !displayName || !bracketName || password.length < 6) {
+          UI.notify('Complete all Manager fields (password min 6 chars).', 'warning');
+          return;
+        }
+        if (Store.db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+          UI.notify('Username already exists.', 'error');
+          return;
+        }
+
+        Store.db.users.push({
+          id: 'mgr_' + Date.now(),
+          username,
+          password,
+          role: 'manager',
+          displayName,
+          bracketName,
+          managerId: null,
+          active: true,
+          createdAt: new Date().toISOString()
+        });
+        Store.save();
+        UI.notify(`Created Manager "${displayName}" (${bracketName}).`, 'success');
+        this.render();
+      },
+
+      openEditManagerModal(mgrId) {
+        const mgr = Store.getUserById(mgrId);
+        if (!mgr) return;
+        UI.openModal({
+          title: `Modify Manager: ${UI.escapeHtml(mgr.displayName)}`,
+          bodyHtml: `
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Display Name</label>
+                <input id="modal-mgr-name" type="text" value="${UI.escapeHtml(mgr.displayName)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Bracket Name</label>
+                <input id="modal-mgr-bracket" type="text" value="${UI.escapeHtml(mgr.bracketName)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Reset Password</label>
+                <input id="modal-mgr-pass" type="text" value="${UI.escapeHtml(mgr.password)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white font-mono" />
+              </div>
+            </div>
+          `,
+          footerHtml: `
+            <button onclick="UI.closeModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs">Cancel</button>
+            <button onclick="SuperadminView.saveManagerEdits('${mgr.id}')" class="px-4 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs">Save Manager</button>
+          `
+        });
+      },
+
+      saveManagerEdits(mgrId) {
+        const mgr = Store.getUserById(mgrId);
+        if (!mgr) return;
+        mgr.displayName = (document.getElementById('modal-mgr-name')?.value || mgr.displayName).trim();
+        mgr.bracketName = (document.getElementById('modal-mgr-bracket')?.value || mgr.bracketName).trim();
+        mgr.password = (document.getElementById('modal-mgr-pass')?.value || mgr.password).trim();
+
+        Store.db.users.forEach(u => {
+          if (u.managerId === mgr.id) u.bracketName = mgr.bracketName;
+        });
+        Store.save();
+        UI.closeModal();
+        UI.notify('Manager account updated.', 'success');
+        this.render();
+      },
+
+      deleteManager(mgrId) {
+        Store.db.users = Store.db.users.filter(u => u.id !== mgrId);
+        Store.save();
+        UI.notify('Manager removed.', 'info');
+        this.render();
+      },
+
+      syncDraftPrizesFromDOM() {
+        const nameEl = document.getElementById('sa-evt-name');
+        const mgrEl = document.getElementById('sa-evt-mgr');
+        const slotsEl = document.getElementById('sa-evt-slots');
+        const priceEl = document.getElementById('sa-evt-price');
+
+        if (nameEl) this.draftEventForm.name = nameEl.value;
+        if (mgrEl) this.draftEventForm.managerId = mgrEl.value;
+        if (slotsEl) this.draftEventForm.totalSlots = slotsEl.value;
+        if (priceEl) this.draftEventForm.pricePerSlot = priceEl.value;
+
+        this.draftPrizes.forEach((p, idx) => {
+          const rEl = document.getElementById(`draft-prize-rank-${idx}`);
+          const dEl = document.getElementById(`draft-prize-desc-${idx}`);
+          const sEl = document.getElementById(`draft-prize-slot-${idx}`);
+          if (rEl) p.rankLabel = rEl.value;
+          if (dEl) p.description = dEl.value;
+          if (sEl) p.preferredSlot = sEl.value;
+        });
+      },
+
+      addPrizeRow() {
+        this.syncDraftPrizesFromDOM();
+        this.draftPrizes.push({
+          rankLabel: `Prize #${this.draftPrizes.length + 1}`,
+          description: '',
+          preferredSlot: ''
+        });
+        this.render();
+      },
+
+      removePrizeRow(idx) {
+        if (this.draftPrizes.length <= 1) return;
+        this.syncDraftPrizesFromDOM();
+        this.draftPrizes.splice(idx, 1);
+        this.render();
+      },
+
+      createRaffleEvent() {
+        this.syncDraftPrizesFromDOM();
+        const name = (this.draftEventForm.name || '').trim();
+        const managerId = this.draftEventForm.managerId || '';
+        const totalSlots = parseInt(this.draftEventForm.totalSlots || '20', 10);
+        const pricePerSlot = parseFloat(this.draftEventForm.pricePerSlot || '100');
+
+        const manager = Store.getUserById(managerId) || Store.db.users.find(u => u.role === 'manager');
+        if (!name || !manager || isNaN(totalSlots) || totalSlots < 5 || totalSlots > 500 || isNaN(pricePerSlot)) {
+          UI.notify('Please provide a valid Event Name, Manager Bracket, Slots (5–500), and Price.', 'warning');
+          return;
+        }
+
+        const builtPrizes = [];
+        for (let i = 0; i < this.draftPrizes.length; i++) {
+          const dp = this.draftPrizes[i];
+          if (!dp.rankLabel.trim() || !dp.description.trim()) {
+            UI.notify(`Please complete prize description for Prize row #${i + 1}.`, 'warning');
+            return;
+          }
+          let pref = null;
+          if (dp.preferredSlot !== '' && dp.preferredSlot !== null) {
+            const parsed = parseInt(dp.preferredSlot, 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= totalSlots) {
+              pref = parsed;
+            } else {
+              UI.notify(`Preferred Winning Slot on Prize #${i + 1} must be between 1 and ${totalSlots} (or left blank for random).`, 'error');
+              return;
+            }
+          }
+          builtPrizes.push({
+            prizeId: `prz_${Date.now()}_${i}`,
+            rankLabel: dp.rankLabel.trim(),
+            description: dp.description.trim(),
+            preferredSlot: pref,
+            winningSlot: null,
+            releaseStatus: 'pending_release',
+            releasedByAgentId: null,
+            releasedAt: null
+          });
+        }
+
+        const slots = [];
+        for (let s = 1; s <= totalSlots; s++) {
+          slots.push({
+            slotNumber: s,
+            status: 'available',
+            buyerNickname: null,
+            buyerPhone: null,
+            agentId: null,
+            soldAt: null,
+            txId: null
+          });
+        }
+
+        Store.db.events.unshift({
+          id: 'evt_' + Date.now(),
+          name,
+          managerId: manager.id,
+          bracketName: manager.bracketName,
+          totalSlots,
+          pricePerSlot,
+          status: 'selling',
+          paymentVerified: false,
+          endorsedAt: null,
+          drawnAt: null,
+          archivedAt: null,
+          createdAt: new Date().toISOString(),
+          prizes: builtPrizes,
+          slots
+        });
+
+        this.draftEventForm = { name: '', managerId: manager.id, totalSlots: 20, pricePerSlot: 150 };
+        this.draftPrizes = [
+          { rankLabel: '1st Prize — Grand Showcase', description: '', preferredSlot: '' },
+          { rankLabel: '2nd Prize — Runner Up', description: '', preferredSlot: '' }
+        ];
+        Store.save();
+        UI.notify(`Raffle Event "${name}" created for ${manager.bracketName}!`, 'success');
+        this.render();
+      },
+
+      openDiscreteOverrideModal(eventId) {
+        const ev = Store.getEventById(eventId);
+        if (!ev) return;
+
+        const rowsHtml = ev.prizes.map((p, idx) => `
+          <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div class="text-xs font-bold text-amber-400">${UI.escapeHtml(p.rankLabel)}</div>
+            <input id="edit-prz-desc-${idx}" type="text" value="${UI.escapeHtml(p.description)}" class="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-xs text-white" />
+            <div class="flex items-center justify-between gap-2 pt-1">
+              <label class="text-xs text-rose-300 font-mono">Discrete Preferred Slot (1–${ev.totalSlots}, blank = Random):</label>
+              <input id="edit-prz-pref-${idx}" type="number" min="1" max="${ev.totalSlots}" value="${p.preferredSlot ?? ''}" placeholder="Random" class="w-28 px-2.5 py-1 rounded bg-slate-900 border border-rose-500/40 text-xs text-rose-200 font-mono" />
+            </div>
+          </div>
+        `).join('');
+
+        UI.openModal({
+          title: `Edit Event & Discrete Slot Overrides: ${UI.escapeHtml(ev.name)}`,
+          bodyHtml: `
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Raffle Event Name</label>
+                <input id="edit-evt-name" type="text" value="${UI.escapeHtml(ev.name)}" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white" />
+              </div>
+              <div class="space-y-2">${rowsHtml}</div>
+            </div>
+          `,
+          footerHtml: `
+            <button onclick="UI.closeModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs">Cancel</button>
+            <button onclick="SuperadminView.saveEventEdits('${ev.id}')" class="px-4 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs">Save Overrides</button>
+          `
+        });
+      },
+
+      saveEventEdits(eventId) {
+        const ev = Store.getEventById(eventId);
+        if (!ev) return;
+        const newName = (document.getElementById('edit-evt-name')?.value || ev.name).trim();
+        ev.name = newName;
+
+        ev.prizes.forEach((p, idx) => {
+          const descEl = document.getElementById(`edit-prz-desc-${idx}`);
+          const prefEl = document.getElementById(`edit-prz-pref-${idx}`);
+          if (descEl && descEl.value.trim()) p.description = descEl.value.trim();
+          if (prefEl) {
+            const val = parseInt(prefEl.value, 10);
+            p.preferredSlot = (!isNaN(val) && val >= 1 && val <= ev.totalSlots) ? val : null;
+          }
+        });
+
+        Store.save();
+        UI.closeModal();
+        UI.notify(`Updated "${ev.name}" discrete prize configuration.`, 'success');
+        this.render();
+      },
+
+      deleteEvent(eventId) {
+        Store.db.events = Store.db.events.filter(e => e.id !== eventId);
+        Store.save();
+        UI.notify('Raffle event deleted.', 'info');
+        this.render();
+      },
+
+      /**
+       * Approves a Manager Proposal and either:
+       * - Immediately launches the Official Live Draw (`launchDrawImmediately = true`)
+       * - Or opens it on the Selling Board (`launchDrawImmediately = false`)
+       */
+      approveProposal(propId, launchDrawImmediately = true) {
+        const prop = Store.db.proposals.find(p => p.id === propId);
+        if (!prop || prop.status !== 'pending') {
+          UI.notify('Endorsement proposal was already processed or not found.', 'warning');
+          return;
+        }
+
+        // Fallback to any active manager if the original manager account was deleted
+        const mgr = Store.getUserById(prop.managerId) || Store.db.users.find(u => u.role === 'manager') || {
+          id: 'mgr_south',
+          bracketName: 'South Metro Community Bracket'
+        };
+
+        const bracketAgent = Store.db.users.find(u => u.role === 'agent' && u.managerId === mgr.id) ||
+                             Store.db.users.find(u => u.role === 'agent') ||
+                             { id: 'agent_sam' };
+
+        const nowIso = new Date().toISOString();
+        const totalSlots = Number(prop.proposedSlots) || 30;
+        const pricePerSlot = Number(prop.proposedPrice) || 100;
+
+        const slots = [];
+        for (let i = 1; i <= totalSlots; i++) {
+          if (launchDrawImmediately) {
+            slots.push({
+              slotNumber: i,
+              status: 'sold',
+              buyerNickname: `Rider_${String(i).padStart(2, '0')}`,
+              buyerPhone: `0918-${String(200 + i).padStart(3, '0')}-${String(3000 + i * 9).slice(0, 4)}`,
+              agentId: bracketAgent.id,
+              soldAt: nowIso,
+              txId: `tx_endorsed_${Date.now()}_${i}`
+            });
+          } else {
+            slots.push({
+              slotNumber: i,
+              status: 'available',
+              buyerNickname: null,
+              buyerPhone: null,
+              agentId: null,
+              soldAt: null,
+              txId: null
+            });
+          }
+        }
+
+        const prizeParts = (prop.proposedPrizes || '').split('|').map(s => s.trim()).filter(Boolean);
+        const prizes = prizeParts.map((txt, idx) => {
+          const colonIdx = txt.indexOf(':');
+          const rankLabel = colonIdx > 0 ? txt.slice(0, colonIdx).trim() : `Prize #${idx + 1}`;
+          const description = colonIdx > 0 ? txt.slice(colonIdx + 1).trim() : txt;
+          return {
+            prizeId: `prz_prop_${Date.now()}_${idx}`,
+            rankLabel,
+            description,
+            preferredSlot: null,
+            winningSlot: null,
+            releaseStatus: 'pending_release',
+            releasedByAgentId: null,
+            releasedAt: null
+          };
+        });
+
+        const newEventId = 'evt_' + Date.now();
+        const newEvent = {
+          id: newEventId,
+          name: prop.proposedName,
+          managerId: mgr.id,
+          bracketName: mgr.bracketName,
+          totalSlots,
+          pricePerSlot,
+          status: launchDrawImmediately ? 'endorsed' : 'selling',
+          paymentVerified: launchDrawImmediately,
+          endorsedAt: launchDrawImmediately ? nowIso : null,
+          drawnAt: null,
+          archivedAt: null,
+          createdAt: nowIso,
+          prizes: prizes.length ? prizes : [{
+            prizeId: `prz_prop_${Date.now()}`,
+            rankLabel: '1st Prize',
+            description: prop.proposedPrizes || 'Community Raffle Prize',
+            preferredSlot: null,
+            winningSlot: null,
+            releaseStatus: 'pending_release',
+            releasedByAgentId: null,
+            releasedAt: null
+          }],
+          slots
+        };
+
+        Store.db.events.unshift(newEvent);
+
+        if (launchDrawImmediately) {
+          Store.db.transactions.unshift({
+            id: `tx_endorsed_batch_${Date.now()}`,
+            eventId: newEventId,
+            eventName: newEvent.name,
+            agentId: bracketAgent.id,
+            managerId: mgr.id,
+            buyerNickname: 'Bracket_Endorsed_Group',
+            buyerPhone: '0918-888-1000',
+            slots: Array.from({ length: totalSlots }, (_, i) => i + 1),
+            saleMode: 'batch',
+            amountTotal: totalSlots * pricePerSlot,
+            createdAt: nowIso
+          });
+        }
+
+        prop.status = 'approved';
+        Store.save();
+
+        if (launchDrawImmediately) {
+          UI.notify(`Approved "${prop.proposedName}" — Launching Official Live Draw now!`, 'success');
+          GameEngine.startOfficialDraw(newEventId);
+        } else {
+          UI.notify(`Approved "${prop.proposedName}" and opened for Agent slot selling under ${mgr.bracketName}.`, 'success');
+          this.render();
+        }
+      },
+
+      unlockDatabaseVault() {
+        const u = (document.getElementById('vault-auth-user')?.value || '').trim();
+        const p = (document.getElementById('vault-auth-pass')?.value || '').trim();
+        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+          Store.sessions.vaultUnlocked = true;
+          UI.notify('Database Vault unlocked for viewing, copying, and archive export.', 'success');
+          this.render();
+        } else {
+          UI.notify('Vault Re-Authentication Failed: Invalid Superadmin credentials.', 'error');
+        }
+      },
+
+      async copyDatabaseToClipboard(format = 'json') {
+        if (!Store.sessions.vaultUnlocked) return;
+        let output = '';
+        if (format === 'json') {
+          output = JSON.stringify(Store.db, null, 2);
+        } else {
+          const lines = ['RECORD_TYPE,ID,NAME_OR_USER,BRACKET_OR_EVENT,STATUS_OR_ROLE,AMOUNT_OR_SLOTS,TIMESTAMP'];
+          Store.db.users.forEach(u => {
+            lines.push(`USER,${u.id},"${u.username}","${u.bracketName}",${u.role},0,${u.createdAt}`);
+          });
+          Store.db.events.forEach(e => {
+            lines.push(`EVENT,${e.id},"${e.name}","${e.bracketName}",${e.status},${Store.getSoldCount(e)}/${e.totalSlots},${e.createdAt}`);
+          });
+          Store.db.transactions.forEach(t => {
+            lines.push(`TRANSACTION,${t.id},"${t.buyerNickname} (${t.buyerPhone})","${t.eventName}",${t.saleMode},${t.amountTotal},${t.createdAt}`);
+          });
+          output = lines.join('\n');
+        }
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(output);
+          } else {
+            const temp = document.createElement('textarea');
+            temp.value = output;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            temp.remove();
+          }
+          UI.notify(`Copied complete database (${format.toUpperCase()}) to clipboard.`, 'success');
+        } catch (err) {
+          UI.notify('Failed to copy to clipboard.', 'error');
+        }
+      },
+
+      downloadDatabaseFile(format = 'json') {
+        if (!Store.sessions.vaultUnlocked) return;
+        let content = '';
+        let mime = 'application/json';
+        let ext = 'json';
+
+        if (format === 'json') {
+          content = JSON.stringify(Store.db, null, 2);
+        } else {
+          mime = 'text/csv';
+          ext = 'csv';
+          const lines = ['RECORD_TYPE,ID,NAME_OR_USER,BRACKET_OR_EVENT,STATUS_OR_ROLE,AMOUNT_OR_SLOTS,TIMESTAMP'];
+          Store.db.users.forEach(u => lines.push(`USER,${u.id},"${u.username}","${u.bracketName}",${u.role},0,${u.createdAt}`));
+          Store.db.events.forEach(e => lines.push(`EVENT,${e.id},"${e.name}","${e.bracketName}",${e.status},${Store.getSoldCount(e)}/${e.totalSlots},${e.createdAt}`));
+          Store.db.transactions.forEach(t => lines.push(`TRANSACTION,${t.id},"${t.buyerNickname} (${t.buyerPhone})","${t.eventName}",${t.saleMode},${t.amountTotal},${t.createdAt}`));
+          content = lines.join('\n');
+        }
+
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `quickdraw_database_archive_${new Date().toISOString().slice(0, 10)}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        UI.notify(`Downloaded Quickdraw database archive (.${ext}).`, 'success');
+      },
+
+      render() {
+        const container = document.getElementById('view-superadmin');
+        if (!Store.sessions.superadmin) {
+          container.innerHTML = `
+            <div class="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 my-6">
+              <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mx-auto flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">Superadmin Command Login</h2>
+                <p class="text-xs text-slate-400">Highest hierarchy account. Controls Managers, Raffle Events, Discrete Winning Slot Overrides, and the Protected Database Vault.</p>
+              </div>
+
+              <form onsubmit="event.preventDefault(); SuperadminView.login();" class="space-y-4" autocomplete="off">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Superadmin Username</label>
+                  <input id="sa-login-user" type="text" placeholder="Enter superadmin username" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-rose-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Password</label>
+                  <input id="sa-login-pass" type="password" placeholder="Enter superadmin password" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-rose-500" />
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-sm transition">
+                  Authenticate as Superadmin
+                </button>
+              </form>
+            </div>
+          `;
+          return;
+        }
+
+        const managers = Store.db.users.filter(u => u.role === 'manager');
+        const agents = Store.db.users.filter(u => u.role === 'agent');
+        const pendingProposals = Store.db.proposals.filter(p => p.status === 'pending');
+        const endorsedEvents = Store.db.events.filter(e => e.status === 'endorsed');
+
+        let globalRevenue = 0;
+        Store.db.events.forEach(ev => {
+          globalRevenue += Store.getSoldCount(ev) * ev.pricePerSlot;
+        });
+
+        container.innerHTML = `
+          <div class="rounded-2xl bg-slate-900 border border-rose-500/30 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-crown"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-lg font-extrabold text-white">Superadmin Control Center</h2>
+                  <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-xs">Authenticated</span>
+                </div>
+                <p class="text-xs text-slate-400">Global Hierarchy Oversight • Discrete Slot Nomination • Protected Database Vault</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="UI.switchTab('draw')" class="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs transition">
+                <i class="fa-solid fa-bolt mr-1"></i> Open Live Draw Studio
+              </button>
+              <button onclick="SuperadminView.logout()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200">
+                Sign Out
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Platform Gross Sales</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono mt-1">${UI.formatCurrency(globalRevenue)}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Managers / Brackets</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-sky-400 font-mono mt-1">${managers.length}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Total Field Agents</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-white font-mono mt-1">${agents.length}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-xs text-slate-400">Total Raffle Events</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-amber-400 font-mono mt-1">${Store.db.events.length}</div>
+            </div>
+          </div>
+
+          <!-- 1. Create New Raffle Event (with Discrete Preferred Winning Slot Override) -->
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <h3 class="text-base sm:text-lg font-bold text-white">1. Create Raffle Draw Event (Supports Discrete Preferred Winning Slot)</h3>
+                <p class="text-xs text-slate-400">Create multiple simultaneous events across Manager brackets. The <strong>Preferred Winning Slot</strong> field is strictly confidential and only visible to Superadmin.</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                <i class="fa-solid fa-eye-slash mr-1"></i> Superadmin-Only Discrete Field
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div class="md:col-span-2">
+                <label class="block text-xs text-slate-400 mb-1">Raffle Event Name</label>
+                <input id="sa-evt-name" type="text" value="${UI.escapeHtml(this.draftEventForm.name)}" placeholder="e.g. Weekend Mega Appliances & Rice Draw" class="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Assign Manager Bracket</label>
+                <select id="sa-evt-mgr" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white">
+                  ${managers.map(m => `<option value="${m.id}" ${this.draftEventForm.managerId === m.id ? 'selected' : ''}>${UI.escapeHtml(m.bracketName)} (${UI.escapeHtml(m.username)})</option>`).join('')}
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Total Slots</label>
+                  <input id="sa-evt-slots" type="number" min="5" max="500" value="${UI.escapeHtml(this.draftEventForm.totalSlots)}" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Price / Slot (₱)</label>
+                  <input id="sa-evt-price" type="number" min="1" value="${UI.escapeHtml(this.draftEventForm.pricePerSlot)}" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-2.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-300">Prize Line Items &amp; Discrete Preferred Winning Slot</label>
+                <button type="button" onclick="SuperadminView.addPrizeRow()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-slate-700">
+                  <i class="fa-solid fa-plus mr-1"></i> Add Prize Line Item
+                </button>
+              </div>
+
+              ${this.draftPrizes.map((p, idx) => `
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <div class="md:col-span-3">
+                    <input id="draft-prize-rank-${idx}" type="text" value="${UI.escapeHtml(p.rankLabel)}" placeholder="Prize Title (e.g. 1st Prize)" class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+                  </div>
+                  <div class="md:col-span-5">
+                    <input id="draft-prize-desc-${idx}" type="text" value="${UI.escapeHtml(p.description)}" placeholder="Detailed Prize Description" class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+                  </div>
+                  <div class="md:col-span-3">
+                    <input id="draft-prize-slot-${idx}" type="number" value="${UI.escapeHtml(p.preferredSlot)}" placeholder="Preferred Slot # (Blank = Random)" class="w-full px-3 py-1.5 rounded-lg bg-rose-950/30 border border-rose-500/40 text-xs text-rose-200 font-mono placeholder:text-rose-300/50" />
+                  </div>
+                  <div class="md:col-span-1 text-right">
+                    <button type="button" onclick="SuperadminView.removePrizeRow(${idx})" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="flex justify-end">
+              <button type="button" onclick="SuperadminView.createRaffleEvent()" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid fa-rocket mr-1"></i> Publish Raffle Event to Bracket
+              </button>
+            </div>
+
+            <!-- Pending Manager Event Endorsements & Draw Queue -->
+            ${(pendingProposals.length > 0 || endorsedEvents.length > 0) ? `
+              <div class="pt-4 border-t border-slate-800 space-y-2.5">
+                <div class="text-xs font-bold uppercase text-amber-400">
+                  <i class="fa-solid fa-bolt mr-1"></i> Pending Manager Event Endorsements (${pendingProposals.length + endorsedEvents.length})
+                </div>
+
+                ${pendingProposals.map(pr => `
+                  <div class="p-3.5 rounded-xl bg-slate-950 border border-amber-500/40 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                    <div class="space-y-0.5">
+                      <div>
+                        <strong class="text-white text-sm">${UI.escapeHtml(pr.proposedName)}</strong> —
+                        <span class="font-mono text-amber-300">${pr.proposedSlots} slots @ ${UI.formatCurrency(pr.proposedPrice)}</span>
+                      </div>
+                      <div class="text-slate-300">Prizes: ${UI.escapeHtml(pr.proposedPrizes)}</div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                      <button type="button" onclick="SuperadminView.approveProposal('${pr.id}', false)" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-semibold transition">
+                        Approve to Selling Board
+                      </button>
+                      <button type="button" onclick="SuperadminView.approveProposal('${pr.id}', true)" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-extrabold shadow-lg shadow-amber-400/20 transition">
+                        <i class="fa-solid fa-play mr-1"></i> Approve &amp; Launch
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+
+                ${endorsedEvents.map(ev => `
+                  <div class="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/40 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                    <div class="space-y-0.5">
+                      <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 font-mono text-[10px] uppercase font-bold">100% Sold &amp; Endorsed</span>
+                        <strong class="text-white text-sm">${UI.escapeHtml(ev.name)}</strong> —
+                        <span class="font-mono text-emerald-300">${ev.totalSlots}/${ev.totalSlots} slots @ ${UI.formatCurrency(ev.pricePerSlot)}</span>
+                      </div>
+                      <div class="text-slate-300">Prizes: ${ev.prizes.map(p => `${UI.escapeHtml(p.rankLabel)}: ${UI.escapeHtml(p.description)}`).join(' | ')}</div>
+                    </div>
+                    <div class="shrink-0">
+                      <button type="button" onclick="GameEngine.startOfficialDraw('${ev.id}')" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-extrabold shadow-lg shadow-amber-400/20 transition">
+                        <i class="fa-solid fa-play mr-1"></i> Approve &amp; Launch
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- 2. Global Raffle Events Overview & Discrete Override Inspector -->
+          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
+            <h3 class="text-base sm:text-lg font-bold text-white">2. Global Raffle Events Overview (Selling, Endorsed, Drawn &amp; History)</h3>
+            <div class="space-y-3">
+              ${Store.db.events.map(ev => {
+                const sc = Store.getSoldCount(ev);
+                return `
+                  <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex items-center gap-2">
+                        ${UI.statusBadgeHtml(ev.status)}
+                        <h4 class="font-bold text-white text-sm sm:text-base">${UI.escapeHtml(ev.name)}</h4>
+                        <span class="text-xs text-slate-400">(${UI.escapeHtml(ev.bracketName)})</span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-mono text-slate-300">${sc}/${ev.totalSlots} sold • ${UI.formatCurrency(sc * ev.pricePerSlot)}</span>
+                        ${ev.status === 'endorsed' ? `
+                          <button type="button" onclick="GameEngine.startOfficialDraw('${ev.id}')" class="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition">
+                            <i class="fa-solid fa-play mr-1"></i> Launch Draw
+                          </button>
+                        ` : ''}
+                        <button type="button" onclick="SuperadminView.openDiscreteOverrideModal('${ev.id}')" class="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold">
+                          <i class="fa-solid fa-sliders mr-1"></i> Discrete Overrides
+                        </button>
+                        <button type="button" onclick="SuperadminView.deleteEvent('${ev.id}')" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      ${ev.prizes.map(p => `
+                        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
+                          <div>
+                            <div class="font-bold text-amber-300">${UI.escapeHtml(p.rankLabel)}</div>
+                            <div class="text-slate-300">${UI.escapeHtml(p.description)}</div>
+                          </div>
+                          <div class="text-right font-mono shrink-0 space-y-0.5">
+                            <div class="text-[11px] text-rose-300">
+                              Preferred: <strong>${p.preferredSlot ? '#' + String(p.preferredSlot).padStart(2, '0') : 'Random'}</strong>
+                            </div>
+                            ${p.winningSlot ? `
+                              <div class="text-[11px] text-emerald-300">
+                                Won: <strong>#${String(p.winningSlot).padStart(2, '0')}</strong> (${p.releaseStatus === 'released' ? 'Released' : 'For Release'})
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- 3. Manager Accounts & Hierarchy Analytics -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4">
+              <h3 class="text-base font-bold text-white">3. Manager Hierarchy &amp; Bracket Finance Analytics</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 uppercase">
+                      <th class="py-2 pr-3">Manager &amp; Bracket</th>
+                      <th class="py-2 px-3">Agents</th>
+                      <th class="py-2 px-3">Events</th>
+                      <th class="py-2 px-3">Revenue</th>
+                      <th class="py-2 pl-3 text-right">Manage</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/70">
+                    ${managers.map(m => {
+                      const mAgents = Store.db.users.filter(u => u.managerId === m.id);
+                      const mEvents = Store.db.events.filter(e => e.managerId === m.id);
+                      const mRev = mEvents.reduce((acc, ev) => acc + Store.getSoldCount(ev) * ev.pricePerSlot, 0);
+                      return `
+                        <tr>
+                          <td class="py-3 pr-3">
+                            <div class="font-bold text-white">${UI.escapeHtml(m.displayName)}</div>
+                            <div class="text-emerald-400">${UI.escapeHtml(m.bracketName)} <span class="text-slate-500 font-mono">(@${UI.escapeHtml(m.username)})</span></div>
+                          </td>
+                          <td class="py-3 px-3 font-mono">${mAgents.length}</td>
+                          <td class="py-3 px-3 font-mono">${mEvents.length}</td>
+                          <td class="py-3 px-3 font-mono font-bold text-emerald-400">${UI.formatCurrency(mRev)}</td>
+                          <td class="py-3 pl-3 text-right space-x-1">
+                            <button onclick="SuperadminView.openEditManagerModal('${m.id}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold">Edit / Pass</button>
+                            <button onclick="SuperadminView.deleteManager('${m.id}')" class="px-2.5 py-1 rounded bg-rose-950/60 text-rose-300"><i class="fa-solid fa-trash"></i></button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="lg:col-span-4 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-3">
+              <h3 class="text-base font-bold text-white">Create Manager Account</h3>
+              <input id="sa-mgr-user" type="text" placeholder="Username (e.g. mgr_east)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <input id="sa-mgr-name" type="text" placeholder="Manager Full/Display Name" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              <input id="sa-mgr-bracket" type="text" placeholder="Bracket Name (e.g. East District)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              <input id="sa-mgr-pass" type="text" placeholder="Password (min 6 chars)" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono" />
+              <button onclick="SuperadminView.createManager()" class="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs transition">
+                Create Manager Account
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. Protected Database Vault -->
+          <div class="rounded-2xl bg-slate-900 border-2 border-rose-500/40 p-5 sm:p-6 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-database text-rose-400"></i>
+                  4. Protected Database Vault (Events, Transactions &amp; Users)
+                </h3>
+                <p class="text-xs text-slate-400">Only the authenticated Superadmin can view, copy, archive, and download raw platform database records.</p>
+              </div>
+              <button onclick="Store.resetToSeed()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-amber-300 border border-amber-500/30">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Demo Seed Data
+              </button>
+            </div>
+
+            ${!Store.sessions.vaultUnlocked ? `
+              <form onsubmit="event.preventDefault(); SuperadminView.unlockDatabaseVault();" class="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3" autocomplete="off">
+                <div class="text-xs text-slate-300">
+                  <i class="fa-solid fa-lock text-rose-400 mr-1"></i>
+                  Re-enter Superadmin username and password to unlock raw database contents and export tools:
+                </div>
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <input id="vault-auth-user" type="text" placeholder="Superadmin Username" required class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono w-40" />
+                  <input id="vault-auth-pass" type="password" placeholder="Superadmin Password" required class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono w-40" />
+                  <button type="submit" class="px-4 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs">
+                    Unlock Vault
+                  </button>
+                </div>
+              </form>
+            ` : `
+              <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <button onclick="SuperadminView.copyDatabaseToClipboard('json')" class="px-3.5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">
+                    <i class="fa-solid fa-copy mr-1"></i> Copy Raw JSON
+                  </button>
+                  <button onclick="SuperadminView.copyDatabaseToClipboard('csv')" class="px-3.5 py-2 rounded-xl bg-sky-500 text-slate-950 font-bold text-xs">
+                    <i class="fa-solid fa-table mr-1"></i> Copy Combined CSV
+                  </button>
+                  <button onclick="SuperadminView.downloadDatabaseFile('json')" class="px-3.5 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs">
+                    <i class="fa-solid fa-download mr-1"></i> Download .JSON Archive
+                  </button>
+                  <button onclick="SuperadminView.downloadDatabaseFile('csv')" class="px-3.5 py-2 rounded-xl bg-purple-400 text-slate-950 font-bold text-xs">
+                    <i class="fa-solid fa-file-csv mr-1"></i> Download .CSV Archive
+                  </button>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 max-h-80 overflow-y-auto">
+                  <pre class="text-[11px] font-mono text-emerald-300 whitespace-pre-wrap">${UI.escapeHtml(JSON.stringify(Store.db, null, 2))}</pre>
+                </div>
+              </div>
+            `}
+          </div>
+        `;
+      }
+    };
+
+    /* =====================================================================
+       9. TAB 5: LIVE DRAW STUDIO & GLOBAL GAME ENGINE (8s ROLL + 10s SHOWCASE)
+       ===================================================================== */
+    const DrawStudioView = {
+      loginFromStudio() {
+        const u = (document.getElementById('draw-login-user')?.value || '').trim();
+        const p = (document.getElementById('draw-login-pass')?.value || '').trim();
+        if (u === SUPERADMIN_STATIC.username && p === SUPERADMIN_STATIC.password) {
+          Store.sessions.superadmin = true;
+          UI.notify('Superadmin verified for Live Draw Studio.', 'success');
+          this.render();
+        } else {
+          UI.notify('Only the Superadmin account can authorize and trigger official raffle draws.', 'error');
+        }
+      },
+
+      render() {
+        const container = document.getElementById('view-draw');
+        if (!Store.sessions.superadmin) {
+          container.innerHTML = `
+            <div class="max-w-md mx-auto bg-slate-900 border border-amber-500/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 my-6">
+              <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-amber-400/15 border border-amber-400/40 text-amber-400 mx-auto flex items-center justify-center text-xl">
+                  <i class="fa-solid fa-bolt"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">Live Draw Studio Authorization</h2>
+                <p class="text-xs text-slate-400">Superadmin credentials are required to initiate an official raffle draw broadcast.</p>
+              </div>
+
+              <form onsubmit="event.preventDefault(); DrawStudioView.loginFromStudio();" class="space-y-4" autocomplete="off">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Superadmin Username</label>
+                  <input id="draw-login-user" type="text" placeholder="Enter superadmin username" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-amber-400" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Superadmin Password</label>
+                  <input id="draw-login-pass" type="password" placeholder="Enter superadmin password" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-amber-400" />
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm transition">
+                  Unlock Live Draw Studio
+                </button>
+              </form>
+            </div>
+          `;
+          return;
+        }
+
+        const endorsedEvents = Store.db.events.filter(e => e.status === 'endorsed');
+        const pendingProposals = Store.db.proposals.filter(p => p.status === 'pending');
+        const sellingEvents = Store.db.events.filter(e => e.status === 'selling');
+
+        container.innerHTML = `
+          <div class="rounded-2xl bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/40 p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400">
+                <i class="fa-solid fa-satellite-dish"></i> Official Quickdraw Game Engine
+              </div>
+              <h2 class="text-xl sm:text-2xl font-extrabold text-white">Live Raffle Draw Broadcast Studio</h2>
+              <p class="text-xs sm:text-sm text-slate-300 max-w-2xl">
+                Launching a draw pauses all dashboards and slot sales across the platform, runs an <strong>8-second kinetic tumbler draw</strong> per prize followed by a <strong>10-second winner showcase</strong> (displaying only Winning Slot # and Prize—zero PII), and updates the persistent top congratulatory marquee.
+              </p>
+            </div>
+          </div>
+
+          <!-- Ready / Endorsed Events Queue -->
+          <div class="space-y-4">
+            <h3 class="text-base font-bold text-white uppercase tracking-wider">
+              Endorsed Events Ready for Drawing (${endorsedEvents.length + pendingProposals.length})
+            </h3>
+
+            ${endorsedEvents.map(ev => `
+              <div class="rounded-2xl bg-slate-900 border-2 border-amber-400/50 p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 shadow-xl">
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    ${UI.statusBadgeHtml(ev.status)}
+                    <span class="text-xs text-slate-400">${UI.escapeHtml(ev.bracketName)}</span>
+                  </div>
+                  <h4 class="text-lg sm:text-xl font-extrabold text-white">${UI.escapeHtml(ev.name)}</h4>
+                  <div class="text-xs text-slate-300 font-mono">
+                    Total Slots: <strong>${ev.totalSlots}/${ev.totalSlots} (100% Sold)</strong> •
+                    Prizes to Draw: <strong>${ev.prizes.length}</strong>
+                  </div>
+                  <div class="flex flex-wrap gap-2 pt-1">
+                    ${ev.prizes.map(p => `
+                      <span class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-amber-300">
+                        <i class="fa-solid fa-gift mr-1"></i> ${UI.escapeHtml(p.rankLabel)}: ${UI.escapeHtml(p.description)}
+                      </span>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div class="shrink-0">
+                  <button onclick="GameEngine.startOfficialDraw('${ev.id}')" class="w-full lg:w-auto px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base shadow-xl shadow-amber-400/20 transition transform hover:-translate-y-0.5">
+                    <i class="fa-solid fa-play mr-1.5"></i> Launch Official Draw (${ev.prizes.length * 18}s Broadcast)
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+
+            ${pendingProposals.map(pr => `
+              <div class="rounded-2xl bg-slate-900 border-2 border-amber-500/40 p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 shadow-xl">
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      <i class="fa-solid fa-clipboard-check mr-1"></i> Pending Manager Endorsement
+                    </span>
+                  </div>
+                  <h4 class="text-lg sm:text-xl font-extrabold text-white">${UI.escapeHtml(pr.proposedName)}</h4>
+                  <div class="text-xs text-slate-300 font-mono">
+                    Total Slots: <strong>${pr.proposedSlots} slots @ ${UI.formatCurrency(pr.proposedPrice)}</strong>
+                  </div>
+                  <div class="text-xs text-amber-300">
+                    <i class="fa-solid fa-gift mr-1"></i> ${UI.escapeHtml(pr.proposedPrizes)}
+                  </div>
+                </div>
+
+                <div class="shrink-0">
+                  <button onclick="SuperadminView.approveProposal('${pr.id}', true)" class="w-full lg:w-auto px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-extrabold text-sm sm:text-base shadow-xl shadow-amber-400/20 transition transform hover:-translate-y-0.5">
+                    <i class="fa-solid fa-play mr-1.5"></i> Approve &amp; Launch Official Draw
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+
+            ${(endorsedEvents.length === 0 && pendingProposals.length === 0) ? `
+              <div class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-2">
+                <div class="text-slate-300 font-semibold">No raffle events are currently Endorsed for Drawing.</div>
+                <p class="text-xs text-slate-400">Once an Agent sells all slots in a Selling event and the Manager clicks "Verify Payment &amp; Endorse for Draw", it will appear here.</p>
+              </div>
+            ` : ''}
+          </div>
+
+          ${sellingEvents.length > 0 ? `
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-800 p-5 space-y-3">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Selling Events Pending Completion &amp; Manager Endorsement</h4>
+              ${sellingEvents.map(ev => {
+                const sc = Store.getSoldCount(ev);
+                return `
+                  <div class="flex items-center justify-between text-xs p-3 rounded-xl bg-slate-950 border border-slate-800">
+                    <div>
+                      <strong class="text-white">${UI.escapeHtml(ev.name)}</strong> (${UI.escapeHtml(ev.bracketName)})
+                    </div>
+                    <span class="font-mono text-slate-400">${sc}/${ev.totalSlots} slots sold</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
+        `;
+      }
+    };
+
+    /* =====================================================================
+       10. GAME ENGINE: 8-SECOND DRAW TUMBLER + 10-SECOND WINNER SHOWCASE
+       ===================================================================== */
+    const GameEngine = {
+      ROLL_DURATION_MS: 8000,
+      SHOWCASE_DURATION_MS: 10000,
+      activeTimers: [],
+
+      clearAllTimers() {
+        this.activeTimers.forEach(id => {
+          clearInterval(id);
+          clearTimeout(id);
+        });
+        this.activeTimers = [];
+      },
+
+      resolveWinningSlotNumber(event, prize, alreadyWonSlotsSet) {
+        const pref = prize.preferredSlot ? parseInt(prize.preferredSlot, 10) : null;
+        if (pref && pref >= 1 && pref <= event.totalSlots && !alreadyWonSlotsSet.has(pref)) {
+          return pref;
+        }
+
+        const candidates = event.slots
+          .filter(s => s.status === 'sold' && !alreadyWonSlotsSet.has(s.slotNumber))
+          .map(s => s.slotNumber);
+
+        const pool = candidates.length > 0
+          ? candidates
+          : Array.from({ length: event.totalSlots }, (_, i) => i + 1).filter(n => !alreadyWonSlotsSet.has(n));
+
+        if (window.crypto && window.crypto.getRandomValues) {
+          const randArr = new Uint32Array(1);
+          window.crypto.getRandomValues(randArr);
+          return pool[randArr[0] % pool.length];
+        }
+        return pool[Math.floor(Math.random() * pool.length)];
+      },
+
+      startOfficialDraw(eventId) {
+        const event = Store.getEventById(eventId);
+        if (!event || (event.status !== 'endorsed' && event.status !== 'selling')) {
+          UI.notify('Event is not eligible for drawing.', 'warning');
+          return;
+        }
+
+        this.clearAllTimers();
+        Store.uiState.isDrawInProgress = true;
+
+        const overlay = document.getElementById('live-draw-overlay');
+        const titleEl = document.getElementById('draw-overlay-event-title');
+        const dockEl = document.getElementById('draw-overlay-Dock');
+
+        titleEl.textContent = `${event.name} (${event.bracketName})`;
+        dockEl.innerHTML = '';
+        overlay.classList.remove('hidden');
+
+        const alreadyWonSlots = new Set();
+        const drawnSummary = [];
+
+        const runPrizeSequence = (prizeIndex) => {
+          if (prizeIndex >= event.prizes.length) {
+            this.renderFinalDrawSummary(event, drawnSummary);
+            return;
+          }
+
+          const currentPrize = event.prizes[prizeIndex];
+          const winningSlotNum = this.resolveWinningSlotNumber(event, currentPrize, alreadyWonSlots);
+          alreadyWonSlots.add(winningSlotNum);
+
+          this.runRollingPhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
+            currentPrize.winningSlot = winningSlotNum;
+            currentPrize.releaseStatus = 'pending_release';
+
+            drawnSummary.push({
+              slotNumber: winningSlotNum,
+              rankLabel: currentPrize.rankLabel,
+              description: currentPrize.description
+            });
+
+            const dockCard = document.createElement('div');
+            dockCard.className = 'p-3 rounded-xl bg-slate-900 border border-amber-400/50 flex items-center justify-between gap-2 text-xs';
+            dockCard.innerHTML = `
+              <div class="truncate">
+                <div class="font-bold text-amber-300">${UI.escapeHtml(currentPrize.rankLabel)}</div>
+                <div class="text-slate-300 truncate">${UI.escapeHtml(currentPrize.description)}</div>
+              </div>
+              <span class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono font-extrabold shrink-0">
+                Slot #${String(winningSlotNum).padStart(2, '0')}
+              </span>
+            `;
+            dockEl.appendChild(dockCard);
+
+            this.runShowcasePhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
+              runPrizeSequence(prizeIndex + 1);
+            });
+          });
+        };
+
+        runPrizeSequence(0);
+      },
+
+      runRollingPhase(event, prize, prizeIdx, totalPrizes, targetSlotNum, onComplete) {
+        const stage = document.getElementById('draw-overlay-stage');
+        const startTime = performance.now();
+        const duration = this.ROLL_DURATION_MS;
+
+        stage.innerHTML = `
+          <div class="space-y-6 max-w-2xl mx-auto">
+            <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase">
+              Drawing Prize ${prizeIdx + 1} of ${totalPrizes} • 8-Second Kinetic Slot Tumbler
+            </div>
+
+            <div class="space-y-1">
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-300">${UI.escapeHtml(prize.rankLabel)}</h2>
+              <p class="text-sm sm:text-base text-slate-300">${UI.escapeHtml(prize.description)}</p>
+            </div>
+
+            <div class="draw-tumbler-box w-56 h-44 sm:w-64 sm:h-48 mx-auto rounded-3xl bg-slate-900 border-4 border-emerald-400 flex flex-col items-center justify-center shadow-2xl">
+              <div class="text-xs font-mono uppercase tracking-widest text-slate-400 mb-1">Slot Number</div>
+              <div id="live-tumbler-digits" class="text-6xl sm:text-7xl font-mono font-extrabold text-white tracking-tighter">
+                #01
+              </div>
+            </div>
+
+            <div class="max-w-md mx-auto space-y-1.5">
+              <div class="flex justify-between text-xs font-mono text-slate-400">
+                <span>RANDOMIZING SLOT POOL (1 – ${event.totalSlots})</span>
+                <span id="roll-countdown-text">8.0s</span>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                <div id="roll-progress-bar" class="h-full bg-gradient-to-r from-emerald-400 to-amber-400 transition-all duration-75" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        const digitsEl = document.getElementById('live-tumbler-digits');
+        const countdownEl = document.getElementById('roll-countdown-text');
+        const barEl = document.getElementById('roll-progress-bar');
+
+        const reelInterval = setInterval(() => {
+          const elapsed = performance.now() - startTime;
+          const remaining = Math.max(0, duration - elapsed);
+          const pct = Math.min(100, (elapsed / duration) * 100);
+
+          const randomDisplaySlot = Math.floor(Math.random() * event.totalSlots) + 1;
+          if (digitsEl) digitsEl.textContent = '#' + String(randomDisplaySlot).padStart(2, '0');
+          if (countdownEl) countdownEl.textContent = (remaining / 1000).toFixed(1) + 's';
+          if (barEl) barEl.style.width = pct + '%';
+
+          SoundFX.tick(420 + (randomDisplaySlot % 12) * 30);
+
+          if (elapsed >= duration) {
+            clearInterval(reelInterval);
+            if (digitsEl) digitsEl.textContent = '#' + String(targetSlotNum).padStart(2, '0');
+            if (countdownEl) countdownEl.textContent = '0.0s';
+            if (barEl) barEl.style.width = '100%';
+            SoundFX.fanfare();
+            onComplete();
+          }
+        }, 70);
+
+        this.activeTimers.push(reelInterval);
+      },
+
+      runShowcasePhase(event, prize, prizeIdx, totalPrizes, winningSlotNum, onComplete) {
+        const stage = document.getElementById('draw-overlay-stage');
+        const startTime = performance.now();
+        const duration = this.SHOWCASE_DURATION_MS;
+
+        stage.innerHTML = `
+          <div class="winner-card-reveal space-y-6 max-w-2xl mx-auto p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400 shadow-2xl">
+            <div class="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-widest">
+              <i class="fa-solid fa-crown"></i> Official Winning Slot Drawn!
+            </div>
+
+            <div class="space-y-1">
+              <div class="text-xs uppercase font-mono text-slate-400">${UI.escapeHtml(event.name)}</div>
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-white">${UI.escapeHtml(prize.rankLabel)}</h2>
+              <p class="text-sm sm:text-base text-amber-200 font-medium">${UI.escapeHtml(prize.description)}</p>
+            </div>
+
+            <div class="py-6 px-8 rounded-2xl bg-slate-950/90 border-2 border-amber-400/80 inline-block shadow-inner">
+              <div class="text-xs font-mono uppercase text-amber-300 tracking-widest mb-1">Winning Slot Number</div>
+              <div class="text-6xl sm:text-7xl font-mono font-extrabold text-amber-400">
+                #${String(winningSlotNum).padStart(2, '0')}
+              </div>
+            </div>
+
+            <div class="text-xs text-slate-400">
+              Congratulations to the holder of <strong>Slot #${String(winningSlotNum).padStart(2, '0')}</strong>! (Zero buyer PII is displayed on broadcast)
+            </div>
+
+            <div class="max-w-md mx-auto space-y-1.5 pt-2">
+              <div class="flex justify-between text-xs font-mono text-amber-300">
+                <span>WINNER SHOWCASE DISPLAY</span>
+                <span id="showcase-countdown-text">10.0s</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div id="showcase-progress-bar" class="h-full bg-amber-400 transition-all duration-100" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        const countdownEl = document.getElementById('showcase-countdown-text');
+        const barEl = document.getElementById('showcase-progress-bar');
+
+        const showcaseInterval = setInterval(() => {
+          const elapsed = performance.now() - startTime;
+          const remaining = Math.max(0, duration - elapsed);
+          const pct = Math.max(0, 100 - (elapsed / duration) * 100);
+
+          if (countdownEl) countdownEl.textContent = (remaining / 1000).toFixed(1) + 's';
+          if (barEl) barEl.style.width = pct + '%';
+
+          if (elapsed >= duration) {
+            clearInterval(showcaseInterval);
+            onComplete();
+          }
+        }, 90);
+
+        this.activeTimers.push(showcaseInterval);
+      },
+
+      renderFinalDrawSummary(event, drawnSummary) {
+        this.clearAllTimers();
+
+        event.status = 'drawn';
+        event.drawnAt = new Date().toISOString();
+
+        Store.db.marquee = {
+          eventId: event.id,
+          eventName: event.name,
+          bracketName: event.bracketName,
+          drawnAt: event.drawnAt,
+          winners: drawnSummary
+        };
+
+        Store.save();
+
+        const stage = document.getElementById('draw-overlay-stage');
+        stage.innerHTML = `
+          <div class="winner-card-reveal max-w-3xl mx-auto bg-slate-900 border-2 border-emerald-400 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div class="space-y-2">
+              <span class="px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase tracking-widest">
+                <i class="fa-solid fa-circle-check mr-1"></i> Official Raffle Draw Complete
+              </span>
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-white">${UI.escapeHtml(event.name)}</h2>
+              <p class="text-xs sm:text-sm text-slate-300">All winning slots have been recorded and posted to the Public Completed Draws board &amp; top Congratulatory Marquee.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+              ${drawnSummary.map(w => `
+                <div class="p-4 rounded-2xl bg-slate-950 border border-amber-400/60 flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs font-bold text-amber-400 uppercase">${UI.escapeHtml(w.rankLabel)}</div>
+                    <div class="text-sm text-white font-medium">${UI.escapeHtml(w.description)}</div>
+                    <div class="text-[11px] text-slate-400 mt-1">Status: For Release</div>
+                  </div>
+                  <div class="px-3.5 py-2 rounded-xl bg-amber-400 text-slate-950 font-mono font-extrabold text-xl shrink-0">
+                    #${String(w.slotNumber).padStart(2, '0')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="pt-2">
+              <button onclick="GameEngine.closeBroadcastAndResume()" class="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition shadow-lg shadow-emerald-500/20">
+                Return to Platform &amp; Publish Results Across All Tabs
+              </button>
+            </div>
+          </div>
+        `;
+      },
+
+      closeBroadcastAndResume() {
+        this.clearAllTimers();
+        Store.uiState.isDrawInProgress = false;
+        document.getElementById('live-draw-overlay').classList.add('hidden');
+        UI.notify('Live Draw finalized! Top congratulatory marquee and Public Results Board updated.', 'success');
+        UI.switchTab('public');
+      }
+    };
+
+    /* =====================================================================
+       11. BOOTSTRAP APPLICATION ON WINDOW LOAD
+       ===================================================================== */
+    window.onload = function () {
+      Store.init();
+      UI.switchTab('public');
+    };
+  </script>
+</body>
+</html>
