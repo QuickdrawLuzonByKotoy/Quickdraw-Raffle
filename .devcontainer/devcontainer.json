@@ -1,10 +1,10 @@
 {
-  "name": "Quickdraw Raffle Dev Container",
+  "name": "Quickdraw Raffle Workspace (Node 20)",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {
-      "label": "Quickdraw Web Server",
+      "label": "Quickdraw Dev Server",
       "onAutoForward": "notify",
       "visibility": "public"
     }
