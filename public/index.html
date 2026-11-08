@@ -672,13 +672,15 @@
       },
 
       save() {
+        if (!this.db) return;
+        this.db.meta = this.db.meta || {};
         this.db.meta.lastUpdated = new Date().toISOString();
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
         } catch (err) {
           console.error('Failed to persist state to localStorage:', err);
         }
-        UI.syncHeaderIndicators();
+        if (window.UI) UI.syncHeaderIndicators();
       },
 
       resetToSeed() {

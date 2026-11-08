@@ -17,8 +17,19 @@
   window.QuickdrawSupabase = sb;
 
   let isApplyingRemoteUpdate = false;
+  let pushInFlight = false;
+  let pendingPush = false;
 
-  // Sync structured relational tables in the background whenever state changes
+  function isRemoteNewer(remotePayload, remoteUpdatedAt) {
+    const localTs = Store.db?.meta?.lastUpdated || '';
+    const remoteTs = (remotePayload && remotePayload.meta && remotePayload.meta.lastUpdated)
+      || remoteUpdatedAt
+      || '';
+    if (!remoteTs) return false;
+    if (!localTs) return true;
+    return remoteTs > localTs;
+  }
+
   async function syncRelationalTables(db) {
     try {
       if (Array.isArray(db.users) && db.users.length > 0) {
@@ -33,7 +44,8 @@
           active: u.active !== false,
           created_at: u.createdAt || new Date().toISOString()
         }));
-        await sb.from('users').upsert(userRows, { onConflict: 'id' });
+        const { error } = await sb.from('users').upsert(userRows, { onConflict: 'id' });
+        if (error) console.warn('users upsert:', error.message);
       }
 
       if (Array.isArray(db.events) && db.events.length > 0) {
@@ -51,12 +63,11 @@
           archived_at: e.archivedAt || null,
           created_at: e.createdAt || new Date().toISOString()
         }));
-        await sb.from('events').upsert(eventRows, { onConflict: 'id' });
+        const { error: evErr } = await sb.from('events').upsert(eventRows, { onConflict: 'id' });
+        if (evErr) console.warn('events upsert:', evErr.message);
 
-        // Flatten prizes and slots for relational inspection in Supabase Table Editor
         const prizeRows = [];
         const slotRows = [];
-
         db.events.forEach(e => {
           (e.prizes || []).forEach(p => {
             prizeRows.push({
@@ -71,7 +82,6 @@
               released_at: p.releasedAt || null
             });
           });
-
           (e.slots || []).forEach(s => {
             slotRows.push({
               event_id: e.id,
@@ -85,12 +95,13 @@
             });
           });
         });
-
-        if (prizeRows.length > 0) {
-          await sb.from('prizes').upsert(prizeRows, { onConflict: 'prize_id' });
+        if (prizeRows.length) {
+          const { error } = await sb.from('prizes').upsert(prizeRows, { onConflict: 'prize_id' });
+          if (error) console.warn('prizes upsert:', error.message);
         }
-        if (slotRows.length > 0) {
-          await sb.from('slots').upsert(slotRows, { onConflict: 'event_id,slot_number' });
+        if (slotRows.length) {
+          const { error } = await sb.from('slots').upsert(slotRows, { onConflict: 'event_id,slot_number' });
+          if (error) console.warn('slots upsert:', error.message);
         }
       }
 
@@ -108,7 +119,8 @@
           status: p.status || 'pending',
           created_at: p.createdAt || new Date().toISOString()
         }));
-        await sb.from('proposals').upsert(propRows, { onConflict: 'id' });
+        const { error } = await sb.from('proposals').upsert(propRows, { onConflict: 'id' });
+        if (error) console.warn('proposals upsert:', error.message);
       }
 
       if (Array.isArray(db.transactions) && db.transactions.length > 0) {
@@ -125,20 +137,32 @@
           amount_total: t.amountTotal,
           created_at: t.createdAt || new Date().toISOString()
         }));
-        await sb.from('transactions').upsert(txRows, { onConflict: 'id' });
+        const { error } = await sb.from('transactions').upsert(txRows, { onConflict: 'id' });
+        if (error) console.warn('transactions upsert:', error.message);
       }
     } catch (err) {
       console.warn('Relational table background sync warning:', err.message);
     }
   }
 
-  // Push complete application state to Supabase app_state + relational tables
   async function pushStateToSupabase() {
     if (isApplyingRemoteUpdate || !Store.db) return;
+    if (pushInFlight) {
+      pendingPush = true;
+      return;
+    }
+    pushInFlight = true;
+    pendingPush = false;
 
     try {
       const nowIso = new Date().toISOString();
+      Store.db.meta = Store.db.meta || {};
       Store.db.meta.lastUpdated = nowIso;
+
+      // Keep localStorage in sync with the timestamp we are about to write
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+      } catch (_) {}
 
       const { error } = await sb
         .from('app_state')
@@ -152,18 +176,29 @@
         );
 
       if (error) {
-        console.error('Supabase state save error:', error.message);
+        console.error('Supabase state save error:', error.message, error);
+        if (window.UI && UI.notify) {
+          UI.notify('Cloud save failed: ' + error.message, 'error');
+        }
         return;
       }
 
-      // Mirror changes into relational tables for Supabase dashboard auditing
+      // Mirror into relational tables for dashboard inspection
       syncRelationalTables(Store.db);
     } catch (err) {
       console.error('Failed to push state to Supabase:', err);
+      if (window.UI && UI.notify) {
+        UI.notify('Cloud save failed. Check console.', 'error');
+      }
+    } finally {
+      pushInFlight = false;
+      if (pendingPush) {
+        pendingPush = false;
+        pushStateToSupabase();
+      }
     }
   }
 
-  // Pull latest state from Supabase on initial boot
   async function pullStateFromSupabase() {
     try {
       const { data, error } = await sb
@@ -174,20 +209,33 @@
 
       if (error) {
         console.warn('Supabase initial fetch notice:', error.message);
+        // Local is already loaded; try to push it so cloud is not empty
+        await pushStateToSupabase();
         return;
       }
 
       if (data && data.payload && Array.isArray(data.payload.events)) {
-        isApplyingRemoteUpdate = true;
-        Store.db = data.payload;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
-        UI.syncHeaderIndicators();
-        if (!Store.uiState.isDrawInProgress) {
-          UI.renderCurrentTab();
+        if (isRemoteNewer(data.payload, data.updated_at)) {
+          isApplyingRemoteUpdate = true;
+          Store.db = data.payload;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+          } catch (_) {}
+          if (window.UI) {
+            UI.syncHeaderIndicators();
+            if (!Store.uiState.isDrawInProgress) {
+              UI.renderCurrentTab();
+            }
+          }
+          isApplyingRemoteUpdate = false;
+          console.log('Applied newer cloud state. lastUpdated=', Store.db.meta?.lastUpdated);
+        } else {
+          // Local is same or newer — push local so cloud catches up
+          console.log('Local state is current; pushing to cloud if needed.');
+          await pushStateToSupabase();
         }
-        isApplyingRemoteUpdate = false;
       } else {
-        // First time connecting: seed Supabase with initial Store.db
+        // First time: seed Supabase from current Store.db
         await pushStateToSupabase();
       }
     } catch (err) {
@@ -209,7 +257,7 @@
     pushStateToSupabase();
   };
 
-  // Subscribe to real-time changes from other browsers/testers
+  // Realtime: only apply if the incoming payload is strictly newer
   sb.channel('quickdraw-live-sync')
     .on(
       'postgres_changes',
@@ -217,25 +265,30 @@
       (change) => {
         if (!change.new || !change.new.payload) return;
         const incoming = change.new.payload;
-        const currentUpdated = Store.db?.meta?.lastUpdated || '';
-        const incomingUpdated = incoming?.meta?.lastUpdated || '';
+        if (!isRemoteNewer(incoming, change.new.updated_at)) return;
 
-        if (incomingUpdated && incomingUpdated !== currentUpdated) {
-          isApplyingRemoteUpdate = true;
-          Store.db = incoming;
+        isApplyingRemoteUpdate = true;
+        Store.db = incoming;
+        try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(Store.db));
+        } catch (_) {}
+        if (window.UI) {
           UI.syncHeaderIndicators();
           if (!Store.uiState.isDrawInProgress) {
             UI.renderCurrentTab();
           }
-          isApplyingRemoteUpdate = false;
         }
+        isApplyingRemoteUpdate = false;
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Realtime channel subscribed for app_state');
+      }
+    });
 
-  // Run initial cloud sync once the window finishes bootstrapping Store
+  // Run after Store.init() has finished (onload + small delay)
   window.addEventListener('load', () => {
-    setTimeout(pullStateFromSupabase, 150);
+    setTimeout(pullStateFromSupabase, 200);
   });
 })();
