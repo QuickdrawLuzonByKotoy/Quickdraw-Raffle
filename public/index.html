@@ -3228,6 +3228,8 @@
       ROLL_DURATION_MS: 8000,
       SHOWCASE_DURATION_MS: 10000,
       activeTimers: [],
+      isRemoteFollower: false,
+      lastRemotePhaseKey: '',
 
       clearAllTimers() {
         this.activeTimers.forEach(id => {
@@ -3235,6 +3237,19 @@
           clearTimeout(id);
         });
         this.activeTimers = [];
+      },
+
+      publishLiveDraw(partial) {
+        const prev = Store.db.liveDraw || {};
+        Store.db.liveDraw = Object.assign({}, prev, partial, {
+          updatedAt: new Date().toISOString()
+        });
+        Store.save();
+      },
+
+      clearLiveDraw() {
+        Store.db.liveDraw = null;
+        Store.save();
       },
 
       resolveWinningSlotNumber(event, prize, alreadyWonSlotsSet) {
@@ -3259,6 +3274,33 @@
         return pool[Math.floor(Math.random() * pool.length)];
       },
 
+      openOverlay(eventName, bracketName) {
+        const overlay = document.getElementById('live-draw-overlay');
+        const titleEl = document.getElementById('draw-overlay-event-title');
+        const dockEl = document.getElementById('draw-overlay-Dock');
+        if (titleEl) titleEl.textContent = `${eventName}${bracketName ? ' (' + bracketName + ')' : ''}`;
+        if (dockEl && !Store.uiState.isDrawInProgress) dockEl.innerHTML = '';
+        if (overlay) overlay.classList.remove('hidden');
+        Store.uiState.isDrawInProgress = true;
+      },
+
+      appendDockCard(rankLabel, description, slotNumber) {
+        const dockEl = document.getElementById('draw-overlay-Dock');
+        if (!dockEl) return;
+        const dockCard = document.createElement('div');
+        dockCard.className = 'p-3 rounded-xl bg-slate-900 border border-amber-400/50 flex items-center justify-between gap-2 text-xs';
+        dockCard.innerHTML = `
+          <div class="truncate">
+            <div class="font-bold text-amber-300">${UI.escapeHtml(rankLabel)}</div>
+            <div class="text-slate-300 truncate">${UI.escapeHtml(description)}</div>
+          </div>
+          <span class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono font-extrabold shrink-0">
+            Slot #${String(slotNumber).padStart(2, '0')}
+          </span>
+        `;
+        dockEl.appendChild(dockCard);
+      },
+
       startOfficialDraw(eventId) {
         const event = Store.getEventById(eventId);
         if (!event || (event.status !== 'endorsed' && event.status !== 'selling')) {
@@ -3266,19 +3308,29 @@
           return;
         }
 
+        this.isRemoteFollower = false;
         this.clearAllTimers();
-        Store.uiState.isDrawInProgress = true;
-
-        const overlay = document.getElementById('live-draw-overlay');
-        const titleEl = document.getElementById('draw-overlay-event-title');
-        const dockEl = document.getElementById('draw-overlay-Dock');
-
-        titleEl.textContent = `${event.name} (${event.bracketName})`;
-        dockEl.innerHTML = '';
-        overlay.classList.remove('hidden');
+        this.openOverlay(event.name, event.bracketName);
 
         const alreadyWonSlots = new Set();
         const drawnSummary = [];
+
+        this.publishLiveDraw({
+          active: true,
+          host: true,
+          eventId: event.id,
+          eventName: event.name,
+          bracketName: event.bracketName,
+          totalSlots: event.totalSlots,
+          phase: 'starting',
+          prizeIndex: 0,
+          totalPrizes: event.prizes.length,
+          winners: [],
+          targetSlot: null,
+          rankLabel: null,
+          description: null,
+          phaseStartedAt: new Date().toISOString()
+        });
 
         const runPrizeSequence = (prizeIndex) => {
           if (prizeIndex >= event.prizes.length) {
@@ -3290,6 +3342,22 @@
           const winningSlotNum = this.resolveWinningSlotNumber(event, currentPrize, alreadyWonSlots);
           alreadyWonSlots.add(winningSlotNum);
 
+          this.publishLiveDraw({
+            active: true,
+            eventId: event.id,
+            eventName: event.name,
+            bracketName: event.bracketName,
+            totalSlots: event.totalSlots,
+            phase: 'rolling',
+            prizeIndex: prizeIndex,
+            totalPrizes: event.prizes.length,
+            targetSlot: winningSlotNum,
+            rankLabel: currentPrize.rankLabel,
+            description: currentPrize.description,
+            winners: drawnSummary.slice(),
+            phaseStartedAt: new Date().toISOString()
+          });
+
           this.runRollingPhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
             currentPrize.winningSlot = winningSlotNum;
             currentPrize.releaseStatus = 'pending_release';
@@ -3300,18 +3368,23 @@
               description: currentPrize.description
             });
 
-            const dockCard = document.createElement('div');
-            dockCard.className = 'p-3 rounded-xl bg-slate-900 border border-amber-400/50 flex items-center justify-between gap-2 text-xs';
-            dockCard.innerHTML = `
-              <div class="truncate">
-                <div class="font-bold text-amber-300">${UI.escapeHtml(currentPrize.rankLabel)}</div>
-                <div class="text-slate-300 truncate">${UI.escapeHtml(currentPrize.description)}</div>
-              </div>
-              <span class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono font-extrabold shrink-0">
-                Slot #${String(winningSlotNum).padStart(2, '0')}
-              </span>
-            `;
-            dockEl.appendChild(dockCard);
+            this.appendDockCard(currentPrize.rankLabel, currentPrize.description, winningSlotNum);
+
+            this.publishLiveDraw({
+              active: true,
+              eventId: event.id,
+              eventName: event.name,
+              bracketName: event.bracketName,
+              totalSlots: event.totalSlots,
+              phase: 'showcase',
+              prizeIndex: prizeIndex,
+              totalPrizes: event.prizes.length,
+              targetSlot: winningSlotNum,
+              rankLabel: currentPrize.rankLabel,
+              description: currentPrize.description,
+              winners: drawnSummary.slice(),
+              phaseStartedAt: new Date().toISOString()
+            });
 
             this.runShowcasePhase(event, currentPrize, prizeIndex, event.prizes.length, winningSlotNum, () => {
               runPrizeSequence(prizeIndex + 1);
@@ -3326,6 +3399,7 @@
         const stage = document.getElementById('draw-overlay-stage');
         const startTime = performance.now();
         const duration = this.ROLL_DURATION_MS;
+        const totalSlots = event.totalSlots || (Store.db.liveDraw && Store.db.liveDraw.totalSlots) || 20;
 
         stage.innerHTML = `
           <div class="space-y-6 max-w-2xl mx-auto">
@@ -3334,8 +3408,8 @@
             </div>
 
             <div class="space-y-1">
-              <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-300">${UI.escapeHtml(prize.rankLabel)}</h2>
-              <p class="text-sm sm:text-base text-slate-300">${UI.escapeHtml(prize.description)}</p>
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-300">${UI.escapeHtml(prize.rankLabel || prize.rankLabel)}</h2>
+              <p class="text-sm sm:text-base text-slate-300">${UI.escapeHtml(prize.description || '')}</p>
             </div>
 
             <div class="draw-tumbler-box w-56 h-44 sm:w-64 sm:h-48 mx-auto rounded-3xl bg-slate-900 border-4 border-emerald-400 flex flex-col items-center justify-center shadow-2xl">
@@ -3347,7 +3421,7 @@
 
             <div class="max-w-md mx-auto space-y-1.5">
               <div class="flex justify-between text-xs font-mono text-slate-400">
-                <span>RANDOMIZING SLOT POOL (1 – ${event.totalSlots})</span>
+                <span>RANDOMIZING SLOT POOL (1 – ${totalSlots})</span>
                 <span id="roll-countdown-text">8.0s</span>
               </div>
               <div class="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
@@ -3366,19 +3440,21 @@
           const remaining = Math.max(0, duration - elapsed);
           const pct = Math.min(100, (elapsed / duration) * 100);
 
-          const randomDisplaySlot = Math.floor(Math.random() * event.totalSlots) + 1;
+          const randomDisplaySlot = Math.floor(Math.random() * totalSlots) + 1;
           if (digitsEl) digitsEl.textContent = '#' + String(randomDisplaySlot).padStart(2, '0');
           if (countdownEl) countdownEl.textContent = (remaining / 1000).toFixed(1) + 's';
           if (barEl) barEl.style.width = pct + '%';
 
-          SoundFX.tick(420 + (randomDisplaySlot % 12) * 30);
+          if (typeof SoundFX !== 'undefined' && SoundFX.tick) {
+            SoundFX.tick(420 + (randomDisplaySlot % 12) * 30);
+          }
 
           if (elapsed >= duration) {
             clearInterval(reelInterval);
             if (digitsEl) digitsEl.textContent = '#' + String(targetSlotNum).padStart(2, '0');
             if (countdownEl) countdownEl.textContent = '0.0s';
             if (barEl) barEl.style.width = '100%';
-            SoundFX.fanfare();
+            if (typeof SoundFX !== 'undefined' && SoundFX.fanfare) SoundFX.fanfare();
             onComplete();
           }
         }, 70);
@@ -3390,6 +3466,7 @@
         const stage = document.getElementById('draw-overlay-stage');
         const startTime = performance.now();
         const duration = this.SHOWCASE_DURATION_MS;
+        const eventName = event.name || (Store.db.liveDraw && Store.db.liveDraw.eventName) || '';
 
         stage.innerHTML = `
           <div class="winner-card-reveal space-y-6 max-w-2xl mx-auto p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400 shadow-2xl">
@@ -3398,7 +3475,7 @@
             </div>
 
             <div class="space-y-1">
-              <div class="text-xs uppercase font-mono text-slate-400">${UI.escapeHtml(event.name)}</div>
+              <div class="text-xs uppercase font-mono text-slate-400">${UI.escapeHtml(eventName)}</div>
               <h2 class="text-2xl sm:text-3xl font-extrabold text-white">${UI.escapeHtml(prize.rankLabel)}</h2>
               <p class="text-sm sm:text-base text-amber-200 font-medium">${UI.escapeHtml(prize.description)}</p>
             </div>
@@ -3460,6 +3537,22 @@
           winners: drawnSummary
         };
 
+        this.publishLiveDraw({
+          active: true,
+          eventId: event.id,
+          eventName: event.name,
+          bracketName: event.bracketName,
+          phase: 'summary',
+          prizeIndex: drawnSummary.length,
+          totalPrizes: drawnSummary.length,
+          winners: drawnSummary,
+          targetSlot: null,
+          rankLabel: null,
+          description: null,
+          phaseStartedAt: new Date().toISOString()
+        });
+
+        // publishLiveDraw already called Store.save(); ensure event status persisted
         Store.save();
 
         const stage = document.getElementById('draw-overlay-stage');
@@ -3499,17 +3592,140 @@
 
       closeBroadcastAndResume() {
         this.clearAllTimers();
+        this.isRemoteFollower = false;
+        this.lastRemotePhaseKey = '';
         Store.uiState.isDrawInProgress = false;
         document.getElementById('live-draw-overlay').classList.add('hidden');
+        this.clearLiveDraw();
         UI.notify('Live Draw finalized! Top congratulatory marquee and Public Results Board updated.', 'success');
         UI.switchTab('public');
+      },
+
+      /**
+       * Called on every device when cloud state arrives.
+       * Host device ignores; followers mirror the live draw phases.
+       */
+      onRemoteState() {
+        const live = Store.db && Store.db.liveDraw;
+
+        // Always refresh dashboards when not mid local animation host
+        if (!this.isRemoteFollower && !Store.uiState.isDrawInProgress) {
+          if (window.UI) {
+            UI.syncHeaderIndicators();
+            UI.renderCurrentTab();
+          }
+        }
+
+        if (!live || !live.active) {
+          // Remote cleared draw — close overlay on followers
+          if (this.isRemoteFollower) {
+            this.clearAllTimers();
+            this.isRemoteFollower = false;
+            this.lastRemotePhaseKey = '';
+            Store.uiState.isDrawInProgress = false;
+            const overlay = document.getElementById('live-draw-overlay');
+            if (overlay) overlay.classList.add('hidden');
+            if (window.UI) {
+              UI.syncHeaderIndicators();
+              UI.renderCurrentTab();
+            }
+          }
+          return;
+        }
+
+        // Host already running local timers — do not double-run
+        if (!this.isRemoteFollower && Store.uiState.isDrawInProgress && live.host) {
+          return;
+        }
+
+        const phaseKey = [live.phase, live.prizeIndex, live.targetSlot, live.phaseStartedAt].join('|');
+        if (phaseKey === this.lastRemotePhaseKey) return;
+        this.lastRemotePhaseKey = phaseKey;
+
+        this.isRemoteFollower = true;
+        this.openOverlay(live.eventName || 'Live Draw', live.bracketName || '');
+
+        // Rebuild dock from winners so far
+        const dockEl = document.getElementById('draw-overlay-Dock');
+        if (dockEl) {
+          dockEl.innerHTML = '';
+          (live.winners || []).forEach(w => {
+            this.appendDockCard(w.rankLabel, w.description, w.slotNumber);
+          });
+        }
+
+        if (live.phase === 'rolling' && live.targetSlot != null) {
+          this.clearAllTimers();
+          const fakeEvent = { name: live.eventName, totalSlots: live.totalSlots || 20 };
+          const fakePrize = { rankLabel: live.rankLabel, description: live.description };
+          this.runRollingPhase(fakeEvent, fakePrize, live.prizeIndex || 0, live.totalPrizes || 1, live.targetSlot, function () {});
+        } else if (live.phase === 'showcase' && live.targetSlot != null) {
+          this.clearAllTimers();
+          const fakeEvent = { name: live.eventName, totalSlots: live.totalSlots || 20 };
+          const fakePrize = { rankLabel: live.rankLabel, description: live.description };
+          this.runShowcasePhase(fakeEvent, fakePrize, live.prizeIndex || 0, live.totalPrizes || 1, live.targetSlot, function () {});
+        } else if (live.phase === 'summary') {
+          this.clearAllTimers();
+          const event = Store.getEventById(live.eventId) || {
+            id: live.eventId,
+            name: live.eventName,
+            bracketName: live.bracketName
+          };
+          const stage = document.getElementById('draw-overlay-stage');
+          const drawnSummary = live.winners || [];
+          if (stage) {
+            stage.innerHTML = `
+              <div class="winner-card-reveal max-w-3xl mx-auto bg-slate-900 border-2 border-emerald-400 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+                <div class="space-y-2">
+                  <span class="px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase tracking-widest">
+                    <i class="fa-solid fa-circle-check mr-1"></i> Official Raffle Draw Complete
+                  </span>
+                  <h2 class="text-2xl sm:text-3xl font-extrabold text-white">${UI.escapeHtml(event.name || live.eventName || '')}</h2>
+                  <p class="text-xs sm:text-sm text-slate-300">Results are live across all connected devices.</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                  ${drawnSummary.map(w => `
+                    <div class="p-4 rounded-2xl bg-slate-950 border border-amber-400/60 flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-xs font-bold text-amber-400 uppercase">${UI.escapeHtml(w.rankLabel)}</div>
+                        <div class="text-sm text-white font-medium">${UI.escapeHtml(w.description)}</div>
+                      </div>
+                      <div class="px-3.5 py-2 rounded-xl bg-amber-400 text-slate-950 font-mono font-extrabold text-xl shrink-0">
+                        #${String(w.slotNumber).padStart(2, '0')}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="pt-2">
+                  <button onclick="GameEngine.closeBroadcastAndResume()" class="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition shadow-lg shadow-emerald-500/20">
+                    Return to Platform
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+        } else if (live.phase === 'starting') {
+          const stage = document.getElementById('draw-overlay-stage');
+          if (stage) {
+            stage.innerHTML = `
+              <div class="text-center space-y-3">
+                <div class="text-amber-300 font-bold uppercase tracking-widest text-sm">Official Draw Starting</div>
+                <div class="text-2xl font-extrabold text-white">${UI.escapeHtml(live.eventName || '')}</div>
+                <div class="text-slate-400 text-sm">Please stand by…</div>
+              </div>
+            `;
+          }
+        }
       }
     };
+
+    window.GameEngine = GameEngine;
 
     /* =====================================================================
        11. BOOTSTRAP APPLICATION ON WINDOW LOAD
        ===================================================================== */
     window.onload = function () {
+
       Store.init();
       UI.switchTab('public');
     };

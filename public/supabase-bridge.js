@@ -255,6 +255,9 @@
               ui.syncHeaderIndicators();
               if (!storeRef.uiState.isDrawInProgress) ui.renderCurrentTab();
             }
+            if (window.GameEngine && typeof GameEngine.onRemoteState === 'function') {
+              GameEngine.onRemoteState();
+            }
             isApplyingRemoteUpdate = false;
             console.log('Applied newer cloud state. lastUpdated=', storeRef.db.meta && storeRef.db.meta.lastUpdated);
           } else {
@@ -298,7 +301,13 @@
           const ui = getUI();
           if (ui) {
             ui.syncHeaderIndicators();
-            if (!storeRef.uiState.isDrawInProgress) ui.renderCurrentTab();
+            // Always refresh tabs for event status changes unless this tab is the draw host mid-animation
+            if (!storeRef.uiState.isDrawInProgress || (window.GameEngine && GameEngine.isRemoteFollower)) {
+              ui.renderCurrentTab();
+            }
+          }
+          if (window.GameEngine && typeof GameEngine.onRemoteState === 'function') {
+            GameEngine.onRemoteState();
           }
           isApplyingRemoteUpdate = false;
         }
