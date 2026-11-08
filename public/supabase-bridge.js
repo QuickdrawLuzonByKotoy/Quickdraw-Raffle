@@ -1,7 +1,6 @@
 /**
  * Quickdraw Supabase Cloud Bridge
- * Connects the browser Store in index.html directly to Supabase PostgreSQL
- * and Realtime channels so the platform runs 24/7 on GitHub Pages.
+ * Cloud-first: every page load pulls app_state from Supabase as source of truth.
  */
 (function () {
   const SUPABASE_URL = 'https://rtvxjluabyrsqwafyzri.supabase.co';
@@ -43,7 +42,6 @@
     let isApplyingRemoteUpdate = false;
     let pushInFlight = false;
     let pendingPush = false;
-
     let cloudReady = false;
 
     function isSeedSnapshot(db) {
@@ -54,8 +52,33 @@
       return !!(payload && Array.isArray(payload.events) && Array.isArray(payload.users));
     }
 
+    function applyCloudPayload(payload, reason) {
+      isApplyingRemoteUpdate = true;
+      storeRef.db = payload;
+      if (storeRef.db.meta) {
+        storeRef.db.meta.fromSeed = !!storeRef.db.meta.fromSeed;
+      }
+      try {
+        localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
+      } catch (_) {}
+      const ui = getUI();
+      if (ui) {
+        ui.syncHeaderIndicators();
+        if (!storeRef.uiState.isDrawInProgress) {
+          ui.renderCurrentTab();
+        }
+      }
+      if (window.GameEngine && typeof GameEngine.onRemoteState === 'function') {
+        GameEngine.onRemoteState();
+      }
+      isApplyingRemoteUpdate = false;
+      console.log(
+        'Cloud state applied (' + reason + '). lastUpdated=',
+        storeRef.db.meta && storeRef.db.meta.lastUpdated
+      );
+    }
+
     function isRemoteNewer(remotePayload, remoteUpdatedAt) {
-      // Seed on this device must never beat real cloud data
       if (isSeedSnapshot(storeRef.db) && hasUsablePayload(remotePayload) && !isSeedSnapshot(remotePayload)) {
         return true;
       }
@@ -192,35 +215,12 @@
       }
     }
 
-    function applyCloudPayload(payload, reason) {
-      isApplyingRemoteUpdate = true;
-      storeRef.db = payload;
-      if (storeRef.db.meta) {
-        storeRef.db.meta.fromSeed = !!storeRef.db.meta.fromSeed;
-      }
-      try {
-        localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
-      } catch (_) {}
-      const ui = getUI();
-      if (ui) {
-        ui.syncHeaderIndicators();
-        if (!storeRef.uiState.isDrawInProgress) ui.renderCurrentTab();
-      }
-      if (window.GameEngine && typeof GameEngine.onRemoteState === 'function') {
-        GameEngine.onRemoteState();
-      }
-      isApplyingRemoteUpdate = false;
-      console.log('Cloud state applied (' + reason + '). lastUpdated=', storeRef.db.meta && storeRef.db.meta.lastUpdated);
-    }
-
     async function pushStateToSupabase() {
       if (isApplyingRemoteUpdate || !storeRef.db) return;
-      // Wait until first pull finishes so a fresh seed cannot wipe the cloud
       if (!cloudReady) {
         pendingPush = true;
         return;
       }
-      // Never upload pure seed over an existing cloud database
       if (isSeedSnapshot(storeRef.db)) {
         console.warn('Skipping cloud push: local data is still the demo seed.');
         return;
@@ -242,14 +242,37 @@
           localStorage.setItem(getStorageKey(), JSON.stringify(storeRef.db));
         } catch (_) {}
 
-        const result = await sb
-          .from('app_state')
-          .upsert(
-            {
-              id: STATE_ROW_ID,
-              payload: storeRef.db,
-     async function pullStateFromSupabase() {
-      // Cloud-first: Supabase app_state is the source of truth on every page load.
+        const result = await sb.from('app_state').upsert(
+          {
+            id: STATE_ROW_ID,
+            payload: storeRef.db,
+            updated_at: nowIso
+          },
+          { onConflict: 'id' }
+        );
+
+        if (result.error) {
+          console.error('Supabase state save error:', result.error.message, result.error);
+          const ui = getUI();
+          if (ui && ui.notify) ui.notify('Cloud save failed: ' + result.error.message, 'error');
+          return;
+        }
+
+        syncRelationalTables(storeRef.db);
+      } catch (err) {
+        console.error('Failed to push state to Supabase:', err);
+        const ui = getUI();
+        if (ui && ui.notify) ui.notify('Cloud save failed. Check console.', 'error');
+      } finally {
+        pushInFlight = false;
+        if (pendingPush) {
+          pendingPush = false;
+          pushStateToSupabase();
+        }
+      }
+    }
+
+    async function pullStateFromSupabase() {
       try {
         const result = await sb
           .from('app_state')
@@ -264,10 +287,8 @@
 
         const data = result.data;
         if (data && hasUsablePayload(data.payload)) {
-          // Cloud-first: every page load adopts Supabase state as the source of truth
           applyCloudPayload(data.payload, 'boot-cloud-first');
         } else {
-          // Empty cloud: upload local once so the project is initialized
           console.log('Cloud empty — uploading local state as initial app_state.');
           if (storeRef.db && storeRef.db.meta) {
             storeRef.db.meta.fromSeed = false;
@@ -279,28 +300,6 @@
         }
       } catch (err) {
         console.warn('Could not load cloud state; using local cache:', err.message);
-      } finally {
-        cloudReady = true;
-        if (pendingPush && storeRef.db && !isSeedSnapshot(storeRef.db)) {
-          pendingPush = false;
-          pushStateToSupabase();
-        }
-      }
-    }
-
-console.log('Cloud app_state empty; uploading local state once.');
-          cloudReady = true;
-          if (isSeedSnapshot(storeRef.db)) {
-            // First install: allow seed push by clearing flag for this one write
-            storeRef.db.meta = storeRef.db.meta || {};
-            storeRef.db.meta.fromSeed = false;
-            storeRef.db.meta.initialSeedUpload = true;
-          }
-          await pushStateToSupabase();
-          return;
-        }
-      } catch (err) {
-        console.warn('Could not load cloud state; using local fallback:', err.message);
       } finally {
         cloudReady = true;
         if (pendingPush && storeRef.db && !isSeedSnapshot(storeRef.db)) {
@@ -325,7 +324,12 @@ console.log('Cloud app_state empty; uploading local state once.');
     sb.channel('quickdraw-live-sync')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.' + STATE_ROW_ID },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'app_state',
+          filter: 'id=eq.' + STATE_ROW_ID
+        },
         function (change) {
           if (!change.new || !change.new.payload) return;
           const incoming = change.new.payload;
@@ -339,7 +343,6 @@ console.log('Cloud app_state empty; uploading local state once.');
           const ui = getUI();
           if (ui) {
             ui.syncHeaderIndicators();
-            // Always refresh tabs for event status changes unless this tab is the draw host mid-animation
             if (!storeRef.uiState.isDrawInProgress || (window.GameEngine && GameEngine.isRemoteFollower)) {
               ui.renderCurrentTab();
             }
